@@ -27,8 +27,7 @@ uniform float uNight;
 uniform float uScan;
 uniform float uTime;
 vec4 sampleField(vec2 xz) {
-  vec2 p = xz + vWarp * mix(300.0, 90.0, uScan);
-  vec4 f = texture2D(uField, (p - uFieldMin) / uFieldSpan);
+  vec4 f = texture2D(uField, (xz - uFieldMin) / uFieldSpan);
   f.a *= smoothstep(uReveal, uReveal - 500.0, length(xz));
   return f;
 }
@@ -44,7 +43,7 @@ function patch(material, { uniforms, warp = true, vertexHead = '', vertexBody = 
       .replace('#include <common>', `#include <common>\nvarying vec3 vW;\nvarying vec2 vWarp;\n${warp ? NOISE : ''}\n${vertexHead}`)
       .replace(
         '#include <begin_vertex>',
-        `#include <begin_vertex>\n${vertexBody}\nvW = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWarp = ${warp ? 'vec2(fbm2(vW.xz / 420.0), fbm2(vW.xz / 420.0 + 17.3)) - 0.5' : 'vec2(0.0)'};`,
+        `#include <begin_vertex>\n${vertexBody}\nvW = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWarp = ${warp ? 'vec2(vnoise(vW.xz / 55.0) - 0.5, 0.0)' : 'vec2(0.0)'};`,
       );
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\nvarying vec3 vW;\n${NOISE}\n${FIELD}\n${fragmentHead}`)
@@ -124,13 +123,12 @@ export function createMaterials(field) {
         }
         if (uScan > 0.5) {
           float shade = vMeta.x < 0.5 ? mix(0.62, 1.0, smoothstep(0.0, 12.0, vWall.y)) * (1.0 - gWin * 0.28) : 1.0;
-          diffuseColor.rgb = mix(vec3(0.075, 0.08, 0.09), gF.rgb, smoothstep(0.03, 0.55, gF.a)) * shade;
+          diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * shade, smoothstep(0.03, 0.55, gF.a));
         }
       `,
       emissive: /* glsl */ `
-        if (uScan > 0.5) {
-          totalEmissiveRadiance += gF.rgb * smoothstep(0.03, 0.55, gF.a) * 0.16;
-        } else if (vMeta.x < 0.5) {
+        if (uScan > 0.5) totalEmissiveRadiance += gF.rgb * smoothstep(0.03, 0.55, gF.a) * (0.05 + 0.2 * uNight);
+        if (vMeta.x < 0.5) {
           vec3 warm = vec3(1.0, 0.68, 0.36);
           float rnd = hash21(floor(gCell) + vec2(vMeta.y * 91.0, vMeta.y * 37.0));
           float density = mix(0.3, 0.85, gF.a);
@@ -212,7 +210,6 @@ export function createMaterials(field) {
       color: /* glsl */ `
         gF = sampleField(vW.xz);
         diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.65, gF.a * 0.35 * (1.0 - uNight));
-        diffuseColor.rgb *= mix(1.0, 0.45, uScan);
       `,
       emissive: groundEmission,
     },

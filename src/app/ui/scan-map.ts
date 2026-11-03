@@ -9,12 +9,13 @@ import { createScanMap } from '../../lib/scan-map.js';
 export class ScanMap implements OnDestroy {
   scan = input.required<any>();
   time = input('dusk');
+  scanColors = input(false);
   nodeSelected = output<{ index: number; node: any; hover: boolean } | null>();
   ready = output<{ buildings: number }>();
   failed = output<unknown>();
 
   private host = viewChild.required<ElementRef<HTMLDivElement>>('host');
-  private instance: { destroy: () => void; setTime: (name: string) => void; zoom: (factor: number) => void } | null = null;
+  private instance: { destroy: () => void; setTime: (name: string) => void; zoom: (factor: number) => void; setScanColors: (on: boolean) => void } | null = null;
 
   constructor() {
     effect(() => {
@@ -30,6 +31,10 @@ export class ScanMap implements OnDestroy {
     effect(() => {
       const time = this.time();
       untracked(() => this.instance?.setTime(time));
+    });
+    effect(() => {
+      const on = this.scanColors();
+      untracked(() => this.instance?.setScanColors(on));
     });
   }
 

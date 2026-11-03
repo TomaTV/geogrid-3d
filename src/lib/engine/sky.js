@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 export const PRESETS = {
   dusk: {
-    elevation: 5.5, azimuth: 248, sun: '#ffa868', sunPower: 3.1, envPower: 0.55, night: 0.72, stars: 0.12, sunDisc: 1,
+    elevation: 5.5, azimuth: 248, sun: '#ffa868', sunPower: 3.7, envPower: 0.6, hemi: '#b09aa8', night: 0.72, stars: 0.12, sunDisc: 1,
     zenith: '#17294f', mid: '#59608a', horizon: '#f08f58', fog: '#5d5a6c', fogDensity: 0.00036, exposure: 1.0, bloom: 0.34, clouds: '#ff9c72',
   },
   night: {
@@ -12,10 +12,6 @@ export const PRESETS = {
   day: {
     elevation: 44, azimuth: 205, sun: '#fff0da', sunPower: 3.5, envPower: 0.95, night: 0, stars: 0, sunDisc: 1,
     zenith: '#2a66b8', mid: '#6ea4dc', horizon: '#d6e6f3', fog: '#bfd2e2', fogDensity: 0.00034, exposure: 0.92, bloom: 0.12, clouds: '#ffffff',
-  },
-  scan: {
-    elevation: 52, azimuth: 215, sun: '#ffffff', sunPower: 1.7, envPower: 0.42, night: 0, stars: 0, sunDisc: 0, scan: true,
-    hemi: '#7f8794', zenith: '#0a0e15', mid: '#10151d', horizon: '#141a23', fog: '#0a0d12', fogDensity: 0.00036, exposure: 1, bloom: 0, clouds: '#10151d',
   },
 };
 
@@ -64,7 +60,7 @@ export function createSky() {
       }
       float fbm(vec2 p) {
         float a = 0.5, s = 0.0;
-        for (int i = 0; i < 3; i++) { s += a * vn(p); p = p * 2.03 + 7.1; a *= 0.5; }
+        for (int i = 0; i < 4; i++) { s += a * vn(p); p = p * 2.03 + 7.1; a *= 0.5; }
         return s;
       }
       void main() {

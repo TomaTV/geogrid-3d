@@ -1,13 +1,19 @@
 import * as THREE from 'three';
 import { MapControls } from 'three/addons/controls/MapControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createField, createProjection } from './engine/field.js';
+import { rgbHex } from './rank-colors.js';
 import { createMaterials } from './engine/materials.js';
 import { PRESETS, createSky, sunDirection } from './engine/sky.js';
 
 const TILES_URL = 'https://tiles.openfreemap.org/planet';
 const WORKERS = 2;
-const MAX_NEAR = 32;
+const MAX_NEAR = 48;
 const FAR_ZOOM = 11;
 const NEAR_ZOOM = 14;
 
@@ -77,6 +83,22 @@ export function createScanMap(container, scan, options) {
   const hemi = new THREE.HemisphereLight(0xffffff, 0x222222, 1);
   scene.add(hemi);
 
+  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 2 }));
+  composer.setPixelRatio(dpr);
+  composer.setSize(container.clientWidth, container.clientHeight);
+  composer.addPass(new RenderPass(scene, camera));
+  // Une seule valeur invalide suffit à noircir de grands rectangles dans le bloom.
+  composer.addPass(
+    new ShaderPass({
+      uniforms: { tDiffuse: { value: null } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); if (isnan(c.r) || isnan(c.g) || isnan(c.b) || isinf(c.r) || isinf(c.g) || isinf(c.b)) c = vec4(0.0, 0.0, 0.0, 1.0); gl_FragColor = vec4(min(c.rgb, vec3(10.0)), 1.0); }',
+    }),
+  );
+  const bloom = new UnrealBloomPass(new THREE.Vector2(container.clientWidth / 2, container.clientHeight / 2), 0.34, 0.55, 0.92);
+  composer.addPass(bloom);
+  composer.addPass(new OutputPass());
+
   const pmrem = new THREE.PMREMGenerator(renderer);
   let envTarget = null;
 
@@ -90,6 +112,7 @@ export function createScanMap(container, scan, options) {
   controls.target.set(0, 0, 0);
 
   let shadowDirty = true;
+  let fogBase = 0.0003;
   let shadowAt = -10;
   const shadowAnchor = new THREE.Vector3(1e9, 0, 0);
 
@@ -105,7 +128,8 @@ export function createScanMap(container, scan, options) {
     hemi.color.set(p.hemi ?? p.mid);
     hemi.groundColor.set(p.fog);
     hemi.intensity = p.envPower * 2.6;
-    mats.uniforms.uScan.value = p.scan ? 1 : 0;
+    bloom.strength = p.bloom;
+    fogBase = p.fogDensity;
     const envScene = new THREE.Scene();
     envScene.add(new THREE.Mesh(sky.mesh.geometry, sky.mesh.material));
     const next = pmrem.fromScene(envScene, 0.02, 0.1, 10);
@@ -197,7 +221,7 @@ export function createScanMap(container, scan, options) {
     if (!template) return;
     const t = controls.target;
     const dist = camera.position.distanceTo(t);
-    const R = THREE.MathUtils.clamp(dist * 1.6, 1300, 3400);
+    const R = THREE.MathUtils.clamp(dist * 1.6, 1300, 4400);
     camera.getWorldDirection(look);
     const size = proj.tileMeters(NEAR_ZOOM);
     const [cx, cy] = proj.tileAt(t.x + look.x * R * 0.3, t.z + look.z * R * 0.3, NEAR_ZOOM);
@@ -244,14 +268,14 @@ export function createScanMap(container, scan, options) {
     for (const e of near) {
       if (!e.treeMesh) continue;
       const d = Math.hypot(e.cx - camera.position.x, e.cz - camera.position.z);
-      const useNear = d < 700;
+      const useNear = d < 900;
       const geo = useNear ? e.treeNear : e.treeFar;
       if (e.treeMesh.geometry !== geo) {
         e.treeMesh.geometry = geo;
         e.treeMesh.castShadow = useNear;
         shadowDirty = true;
       }
-      e.treeMesh.visible = d < 2600;
+      e.treeMesh.visible = d < 3200;
     }
   }
 
@@ -489,8 +513,13 @@ export function createScanMap(container, scan, options) {
       node: nodes[e.node],
       dist: Math.round(e.dist),
       businessDist: businessXZ ? Math.round(Math.hypot(h.point.x - businessXZ[0], h.point.z - businessXZ[1])) : null,
-      est: e.rank != null && e.conf >= 0.5 ? Math.round(e.rank * 10) / 10 : null,
+      inScan: e.conf >= 0.25,
+      outOfTop: e.outOfTop,
+      est: e.rank != null ? Math.round(e.rank) : null,
+      estColor: e.rgb ? rgbHex(e.rgb) : '#555555',
       height: Math.round(h.height),
+      from: proj.toLngLat(h.point.x, h.point.z),
+      to: selfNode ? [selfNode.lng, selfNode.lat] : null,
       hit: h,
     };
   }
@@ -563,6 +592,7 @@ export function createScanMap(container, scan, options) {
     renderer.setSize(w, h);
     renderer.domElement.style.width = '100%';
     renderer.domElement.style.height = '100%';
+    composer.setSize(w, h);
   });
   resize.observe(container);
 
@@ -651,6 +681,7 @@ export function createScanMap(container, scan, options) {
       camera.updateProjectionMatrix();
     }
     land.position.set(camera.position.x, 0, camera.position.z);
+    scene.fog.density = fogBase / Math.max(1, dist / 1500);
 
     if (now > refreshAt) {
       refreshAt = now + 0.4;
@@ -665,7 +696,8 @@ export function createScanMap(container, scan, options) {
     }
     renderedAt = now;
     updateShadow();
-    renderer.render(scene, camera);
+    if (quality < 2) composer.render(delta);
+    else renderer.render(scene, camera);
 
     for (const l of labels) {
       v.copy(l.pos).project(camera);
@@ -683,12 +715,13 @@ export function createScanMap(container, scan, options) {
       const fps = frames / (now - fpsAt);
       frames = 0;
       fpsAt = now;
-      if (!hq && firstReady && fps < 28 && quality < 3) {
+      if (!hq && firstReady && fps < 28 && quality < 4) {
         quality++;
-        if (quality < 3) {
+        if (quality === 1 || quality === 3) {
           dpr = quality === 1 ? 1 : 0.8;
           renderer.setPixelRatio(dpr);
-        } else {
+          composer.setPixelRatio(dpr);
+        } else if (quality === 4) {
           sun.castShadow = false;
         }
       }
@@ -710,6 +743,9 @@ export function createScanMap(container, scan, options) {
 
   return {
     zoom: zoomBy,
+    setScanColors(on) {
+      mats.uniforms.uScan.value = on ? 1 : 0;
+    },
     setTime(name) {
       if (PRESETS[name]) applyPreset(PRESETS[name]);
     },
@@ -725,6 +761,7 @@ export function createScanMap(container, scan, options) {
       for (const w of workers) w.instance.terminate();
       for (const e of [...tiles.values()]) dropTile(e);
       controls.dispose();
+      composer.dispose();
       pmrem.dispose();
       envTarget?.dispose();
       field.texture.dispose();

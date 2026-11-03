@@ -9,7 +9,7 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
   template: `
     @if (scan(); as s) {
       <div class="relative h-dvh w-full overflow-hidden">
-        <app-scan-map #map [scan]="s" [time]="time()" (nodeSelected)="active.set($event)" (ready)="loading.set(false)" (failed)="fail()" />
+        <app-scan-map #map [scan]="s" [time]="time()" [scanColors]="scanColors()" (nodeSelected)="active.set($event)" (ready)="loading.set(false)" (failed)="fail()" />
 
         <div class="pointer-events-none absolute z-10 left-4 top-[68px] max-w-[300px] sm:left-6">
           <p class="eyebrow">{{ s.keyword }}</p>
@@ -25,24 +25,30 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
             <p class="eyebrow">Selected building</p>
             <div class="mt-2 flex items-end justify-between gap-4">
               <div>
-                <p class="eyebrow">Nearest measured point</p>
-                <p class="display mt-1 text-[40px]" [style.color]="color(a.node.rank)">{{ fmt(a.node.rank) }}</p>
+                <p class="eyebrow">Estimated rank here</p>
+                @if (!a.inScan) {
+                  <p class="display mt-1 text-[26px] text-white/50">Outside the scan</p>
+                } @else if (a.outOfTop) {
+                  <p class="display mt-1 text-[40px]" [style.color]="a.estColor">20+</p>
+                } @else {
+                  <p class="display mt-1 text-[40px]" [style.color]="a.estColor">#{{ a.est }}</p>
+                }
               </div>
-              <div class="pb-2 text-right">
-                <p class="eyebrow">Point is</p>
-                <p class="mt-1 font-mono text-[12px] text-white/70">{{ dist(a.dist) }} away</p>
-              </div>
+              @if (a.businessDist !== null) {
+                <div class="pb-2 text-right">
+                  <p class="eyebrow">To the business</p>
+                  <p class="display mt-1 text-[24px]">{{ dist(a.businessDist) }}</p>
+                </div>
+              }
             </div>
-            @if (a.businessDist !== null) {
-              <p class="mt-2 font-mono text-[11px] text-white/45">{{ dist(a.businessDist) }} from {{ s.target_name }}</p>
-            }
-            @if (a.est !== null) {
-              <p class="mt-2 font-mono text-[11px] text-white/45">Estimated here about #{{ a.est }} (interpolated)</p>
-            }
+            <p class="mt-2 font-mono text-[11px] text-white/45">Nearest measured point: <span [style.color]="color(a.node.rank)">{{ fmt(a.node.rank) }}</span>, {{ dist(a.dist) }} away</p>
             <p class="mt-1 font-mono text-[11px] text-white/45">Building height about {{ a.height }} m</p>
+            @if (a.to) {
+              <a class="mt-2 inline-block font-mono text-[11px] text-accent/80 hover:text-accent" target="_blank" rel="noopener" [href]="mapsUrl(a)">Check on Google Maps &#8599;</a>
+            }
             @if (a.node.competitors?.length) {
               <div class="mt-4 border-t border-white/[0.06] pt-3">
-                <p class="eyebrow">Ahead of you here</p>
+                <p class="eyebrow">Top results at that point</p>
                 <ul class="mt-2 space-y-1.5">
                   @for (c of a.node.competitors.slice(0, 3); track c.cid) {
                     <li class="flex items-baseline justify-between gap-3 text-[12.5px]">
@@ -53,7 +59,7 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
                 </ul>
               </div>
             }
-            <p class="mt-3 text-[11px] leading-snug text-white/30">Rank is measured at Geogrid points only. The glow between them is an estimate, with an organic spread.</p>
+            <p class="mt-3 text-[11px] leading-snug text-white/30">Rank is measured at Geogrid points only. Between them the color and the rank above are the same estimate.</p>
           </aside>
         }
 
@@ -70,6 +76,10 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path [attr.d]="t.icon" /></svg>
             </button>
           }
+          <span class="my-1 h-px w-6 bg-white/10"></span>
+          <button type="button" class="rail-btn" [class.rail-on]="scanColors()" [attr.aria-pressed]="scanColors()" aria-label="Building colors" [title]="scanColors() ? 'Building colors: on' : 'Building colors: off'" (click)="scanColors.set(!scanColors())">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V9l6-4v16M10 21V3l10 5v13M2 21h20M14 11h2M14 15h2" /></svg>
+          </button>
         </div>
 
         <app-rank-legend class="pointer-events-none absolute z-10 bottom-3 left-1/2 hidden -translate-x-1/2 rounded-full border border-white/10 bg-bg/80 px-4 py-2 backdrop-blur-xl sm:flex" />
@@ -87,11 +97,11 @@ export class ScanView {
   scan = input.required<any>();
   active = signal<any>(null);
   time = signal('dusk');
+  scanColors = signal(false);
   times = [
     { id: 'dusk', label: 'Dusk', icon: 'M3 17h18M6.5 17a5.5 5.5 0 0 1 11 0M12 5v3M4.9 8.9l2 2M19.1 8.9l-2 2M4 21h16' },
     { id: 'night', label: 'Night', icon: 'M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z' },
     { id: 'day', label: 'Day', icon: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4' },
-    { id: 'scan', label: 'Scan colors', icon: 'M4 21V9l6-4v16M10 21V3l10 5v13M2 21h20M14 11h2M14 15h2' },
   ];
   loading = signal(true);
   error = signal(false);
@@ -102,6 +112,11 @@ export class ScanView {
 
   geogridUrl(id: string) {
     return 'https://geogrid.dev/dashboard/scans/' + id;
+  }
+
+  mapsUrl(a: any) {
+    const p = (c: number[]) => c[1].toFixed(6) + ',' + c[0].toFixed(6);
+    return 'https://www.google.com/maps/dir/?api=1&travelmode=walking&origin=' + p(a.from) + '&destination=' + p(a.to);
   }
 
   fail() {

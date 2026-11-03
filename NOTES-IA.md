@@ -25,8 +25,8 @@ Moteur Three.js écrit de zéro, MapLibre et deck.gl ont été retirés. Inspir�
   - `hide_3d` respecté, parties OSM (`render_min_height`) gardées, toit mansardé procédural quand l'empreinte s'y prête.
   - Hauteur manquante dans OSM (5 m par défaut) : remplacée par la médiane de la tuile avec une variation. Le panneau dit « about ».
   - Arbres procéduraux : parcs en bosquets, forêts denses, alignement le long des rues, avec un raster d'occupation pour éviter immeubles, routes et eau.
-- `engine/field.js` : projection locale en mètres et champ de rang (noyau gaussien sur les points mesurés, couleurs Geogrid mélangées), en texture 256x256.
-- `engine/materials.js` : shaders. Le champ est lu par fragment, déformé par du bruit pour casser l'aspect quadrillé. Fenêtres, façades, zinc, routes, voitures, eau, arbres. La couleur de rang passe par les fenêtres, les toits, les routes et le sol. Sol dessiné sans test de profondeur dans l'ordre (pas de z-fighting).
+- `engine/field.js` : projection locale en mètres et champ de rang, source unique de la couleur et du rang du panneau : moyenne gaussienne des points classés, un point hors top 20 ne compte que localement, déformation organique cuite dans la texture 256x256 et appliquée aussi au clic.
+- `engine/materials.js` : shaders Lambert (eau en Standard). Le champ est lu par fragment. Fenêtres, façades, zinc, routes, voitures, eau, arbres. La couleur de rang passe par les fenêtres, les toits, les routes et le sol. Sol dessiné sans test de profondeur dans l'ordre (pas de z-fighting).
 - `engine/sky.js` : ciel, soleil, nuages, étoiles, préréglages Dusk, Night, Day (lumière, brouillard, exposition, bloom).
 - `rank-colors.js` : palette exacte de Geogrid. Hors top 20 = gris `#555555`, pas rouge.
 

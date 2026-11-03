@@ -1,8 +1,36 @@
 import * as THREE from 'three';
-import { nodeRgb } from '../rank-colors.js';
+import { rankRgb } from '../rank-colors.js';
 
 const C = 40075016.686;
-const RANK_CAP = 25;
+const UNRANKED_RGB = [85, 85, 85];
+
+function hash2(x, y) {
+  const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+
+function noise2(x, y) {
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  const fx = x - ix;
+  const fy = y - iy;
+  const u = fx * fx * (3 - 2 * fx);
+  const v = fy * fy * (3 - 2 * fy);
+  const a = hash2(ix, iy);
+  const b = hash2(ix + 1, iy);
+  const c = hash2(ix, iy + 1);
+  const d = hash2(ix + 1, iy + 1);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+
+function warp(x, z) {
+  const p = x / 420;
+  const q = z / 420;
+  return [
+    x + (noise2(p, q) * 0.65 + noise2(p * 2.13 + 11, q * 2.13 + 11) * 0.35 - 0.5) * 240,
+    z + (noise2(p + 17.3, q + 17.3) * 0.65 + noise2(p * 2.13 + 28, q * 2.13 + 28) * 0.35 - 0.5) * 240,
+  ];
+}
 const SIZE = 256;
 
 export function createProjection(lng0, lat0) {
@@ -19,6 +47,12 @@ export function createProjection(lng0, lat0) {
     mx0,
     my0,
     toWorld: (lng, lat) => [(mx(lng) - mx0) * C * k, (my(lat) - my0) * C * k],
+    toLngLat(x, z) {
+      const lng = (x / (C * k) + mx0) * 360 - 180;
+      const y = z / (C * k) + my0;
+      const lat = (Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180) / Math.PI;
+      return [lng, lat];
+    },
     tileAt(x, z, zoom) {
       const n = 2 ** zoom;
       return [Math.floor((x / (C * k) + mx0) * n), Math.floor((z / (C * k) + my0) * n)];
@@ -50,31 +84,36 @@ export function createField(nodes, proj) {
   // Comme Geogrid : les points classés se diffusent aux cases voisines, un point hors top 20 reste local.
   const sigma = Math.max(step * 1.6, 520);
 
+  // Source unique : la couleur affichée sur la ville et le rang du panneau sortent de ce calcul.
   function estimate(x, z) {
-    let nearest = [Infinity, 0];
+    const [wx, wz] = warp(x, z);
     let measured = [Infinity, -1];
-    let w = 0;
-    let rank = 0;
-    const acc = [0, 0, 0];
+    let nearest = [Infinity, 0];
+    let ranked = 0;
+    let unranked = 0;
+    let sum = 0;
     for (let i = 0; i < pts.length; i++) {
-      const d = Math.hypot(pts[i][0] - x, pts[i][1] - z);
-      if (d < nearest[0]) nearest = [d, i];
+      const real = Math.hypot(pts[i][0] - x, pts[i][1] - z);
+      if (real < nearest[0]) nearest = [real, i];
       if (nodes[i].rank == null) continue;
-      if (d < measured[0]) measured = [d, i];
+      if (real < measured[0]) measured = [real, i];
+      const d = Math.hypot(pts[i][0] - wx, pts[i][1] - wz);
       if (d > sigma * 3.2) continue;
-      const reach = nodes[i].rank > 20 ? sigma * 0.42 : sigma;
-      const wi = Math.exp(-((d / reach) ** 2));
-      w += wi;
-      rank += wi * Math.min(nodes[i].rank, RANK_CAP);
-      const c = nodeRgb(nodes[i].rank);
-      acc[0] += wi * c[0];
-      acc[1] += wi * c[1];
-      acc[2] += wi * c[2];
+      if (nodes[i].rank > 20) {
+        unranked += Math.exp(-((d / (sigma * 0.42)) ** 2));
+      } else {
+        const wi = Math.exp(-((d / sigma) ** 2));
+        ranked += wi;
+        sum += wi * nodes[i].rank;
+      }
     }
     const ref = measured[1] >= 0 ? measured : nearest;
-    if (w < 1e-4) return { node: ref[1], dist: ref[0], rank: null, rgb: null, conf: 0 };
+    const w = ranked + unranked;
+    if (w < 1e-4) return { node: ref[1], dist: ref[0], rank: null, outOfTop: false, rgb: null, conf: 0 };
+    const outOfTop = unranked > ranked;
+    const rank = ranked > 0 ? sum / ranked : null;
     const t = Math.min(1, w / 0.3);
-    return { node: ref[1], dist: ref[0], rank: rank / w, rgb: acc.map((v) => v / w), conf: t * t * (3 - 2 * t) };
+    return { node: ref[1], dist: ref[0], rank, outOfTop, rgb: outOfTop || rank == null ? UNRANKED_RGB : rankRgb(rank), conf: t * t * (3 - 2 * t) };
   }
 
   const pad = sigma * 2;
