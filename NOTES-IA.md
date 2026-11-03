@@ -20,7 +20,8 @@ npm run dev     # ng serve :4200, json-server :3001, proxy de clé :3002
   - `scan-map.js` : carte MapLibre, chargement des tuiles autour de la caméra, survol et clic, lien point-immeuble, soleil.
   - `buildings.js` : télécharge et décode les tuiles vectorielles OpenFreeMap (zoom 14) : bâtiments, parcs, forêts.
   - `building-ranks.js` : estimation du rang par immeuble (noyau gaussien sur les nœuds mesurés, couleur mélangée dans l'espace des couleurs Geogrid), fondu vers le gris neutre loin des mesures.
-  - `trees.js` : arbres posés au hasard dans les parcs et forêts (pas des vrais arbres).
+  - `deck-layers.js` : rendu deck.gl (`MapboxOverlay` non entrelacé) : bâtiments extrudés (`GeoJsonLayer`) avec lumière ambiante et soleil directionnel, arbres en maillages (`SimpleMeshLayer`, sphères sur troncs). MapLibre ne garde que le fond (sol, routes, eau), le ciel, la caméra et les repères.
+  - `trees.js` : positions d'arbres tirées au hasard dans les parcs et forêts (pas des vrais arbres).
   - `map-style.js` : style sombre, ciel crépusculaire, couches par tuile.
   - `rank-colors.js` : palette exacte de Geogrid (`scan-utils.js` côté produit). Hors top 20 = gris `#555555`, pas rouge.
 - `src/app/data/` : `ScanStore` (signal privé `#scans`, vue en lecture seule, `computed`), `ScanSource` (mock ou live), modèles.
@@ -42,8 +43,8 @@ La clé API `gk_live_...` a été collée dans la conversation. À révoquer apr
 
 ## Problèmes connus
 
-1. Le rendu n'est pas du niveau de Streets GL : pas d'ombres projetées, pas d'occlusion ambiante, pas de vrais arbres. MapLibre ne propose ni l'un ni l'autre.
-2. Les arbres sont des cylindres à deux étages placés aléatoirement dans les parcs. Pas d'arbres d'alignement.
+1. Le rendu n'est pas encore au niveau de Streets GL. deck.gl est branché (la lumière directionnelle se voit sur les façades) mais les ombres projetées sont désactivées (`_shadow: false` dans `deck-layers.js`) : activées, luma.gl affiche `Binding shadow_uShadowMap0 not found` et rien ne s'ombre. À creuser (plan de sol, versions deck.gl 9.4 et luma.gl 9.4, mode entrelacé). Pas d'occlusion ambiante.
+2. Les arbres sont des sphères sur troncs, placées aléatoirement dans les parcs, petites vues de loin. Pas d'arbres d'alignement, pas de vrai modèle d'arbre.
 3. Au-delà de 7 km il n'y a plus de bâtiments : la limite est visible malgré la brume.
 4. Le scan fixture est partiel : les couleurs se limitent à des bandes autour des 44 nœuds.
 5. Le formulaire « New scan » n'a pas le look du wizard de Geogrid (`src/components/dashboard/ScanWizard.jsx`, `src/hooks/useScanWizard.js`).
@@ -64,7 +65,7 @@ Sources : docs deck.gl `using-effects`, docs Cesium sur le style des 3D Tiles, d
 
 ## Prochaines étapes proposées
 
-1. Prototype deck.gl en superposition sur la carte actuelle : bâtiments extrudés avec ombres du soleil, vrais arbres (modèle simple), garder MapLibre pour le ciel et la caméra.
+1. deck.gl est branché (fait). Reste : faire marcher les ombres, remplacer les sphères par un modèle d'arbre (GLB via `ScenegraphLayer`), ajouter les arbres d'alignement (open data de Paris).
 2. Reprendre le look du wizard de Geogrid pour « New scan ».
 3. Faire un scan complet d'une grille 13x13 avec un mot-clé local pour une fixture plus riche.
 4. Créer le repo public `geogrid-3d` (contenu de `3d/`), README en français avec logo, bannière et captures (390 px et desktop).
