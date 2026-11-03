@@ -116,7 +116,7 @@ export function createMaterials(field) {
           float ao = mix(0.45, 1.0, smoothstep(0.0, 9.0, vWall.y));
           float streak = 0.92 + 0.08 * vnoise(vec2(vWall.x * 0.6, vWall.y * 0.08) + seed * 40.0);
           diffuseColor.rgb = stone * ao * streak * (1.0 - 0.22 * cornice);
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.025, 0.03, 0.04), gWin);
+          diffuseColor.rgb = mix(diffuseColor.rgb, mix(vec3(0.16, 0.2, 0.25), vec3(0.025, 0.03, 0.04), uNight), gWin);
           diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.8, gF.a * (1.0 - uNight) * 0.45 * uDataGain);
         } else {
           vec3 zinc = mix(vec3(0.17, 0.2, 0.24), vec3(0.3, 0.31, 0.33), fract(seed * 5.1 + cellTone * 0.6));

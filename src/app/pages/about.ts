@@ -20,8 +20,8 @@ import { RouterLink } from '@angular/router';
           résultat est posé sur les immeubles d'une ville en 3D, avec les couleurs de rang de Geogrid.
         </p>
         <p>
-          Chaque immeuble prend la couleur des points mesurés autour de lui. Le rang est mesuré aux points, pas aux
-          immeubles : les couleurs entre deux points sont interpolées, et s'estompent loin de toute mesure.
+          Le rang est mesuré aux points de Geogrid, pas aux immeubles. Entre les points, la couleur est une estimation
+          volontairement organique : elle se diffuse dans les fenêtres, les toits et les rues, et s'estompe loin de toute mesure.
         </p>
       </div>
 
@@ -29,7 +29,7 @@ import { RouterLink } from '@angular/router';
       <ul class="mt-4 space-y-3 text-[14px] text-white/65">
         <li><span class="eyebrow mr-2">Données</span>l'API publique de Geogrid, derrière un petit proxy qui garde la clé côté serveur.</li>
         <li><span class="eyebrow mr-2">Mode mock</span>un vrai scan figé, aucun crédit consommé. Le mode live lance un vrai scan.</li>
-        <li><span class="eyebrow mr-2">Carte</span>MapLibre GL, bâtiments et parcs d'OpenStreetMap chargés autour de la caméra.</li>
+        <li><span class="eyebrow mr-2">Moteur</span>écrit avec Three.js : bâtiments, routes et parcs d'OpenStreetMap construits dans des workers autour de la caméra, arbres et toits procéduraux, ciel, ombres et heure du jour.</li>
         <li><span class="eyebrow mr-2">Collection</span>les scans sont sauvegardés avec json-server (lecture, modification, suppression).</li>
         <li><span class="eyebrow mr-2">Angular</span>composants standalone, signaux, formulaire réactif, routes chargées à la demande.</li>
       </ul>

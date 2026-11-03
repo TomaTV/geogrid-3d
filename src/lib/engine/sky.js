@@ -11,7 +11,7 @@ export const PRESETS = {
   },
   day: {
     elevation: 44, azimuth: 205, sun: '#fff0da', sunPower: 3.5, envPower: 0.95, night: 0, stars: 0, sunDisc: 1,
-    zenith: '#2a66b8', mid: '#6ea4dc', horizon: '#d6e6f3', fog: '#bfd2e2', fogDensity: 0.00024, exposure: 0.92, bloom: 0.12, clouds: '#ffffff',
+    zenith: '#2a66b8', mid: '#6ea4dc', horizon: '#d6e6f3', fog: '#bfd2e2', fogDensity: 0.00015, exposure: 0.92, bloom: 0.12, clouds: '#ffffff',
   },
 };
 
@@ -82,9 +82,11 @@ export function createSky() {
           float lit = 0.42 + 0.85 * smoothstep(0.45, 0.8, fbm(sp + uSun.xz * 0.14 + vec2(uClock * 0.006, uClock * 0.002)) * 0.5 + pow(toSun, 3.0) * 0.6);
           c = mix(c, uCloud * lit, cover * 0.8);
           if (uStars > 0.0) {
-            vec3 q = floor(d * 240.0);
+            vec3 g = d * 260.0;
+            vec3 q = floor(g);
             float s = h21(q.xy + q.z * 3.1);
-            c += vec3(0.9, 0.95, 1.0) * step(0.9972, s) * (s - 0.9972) * 330.0 * uStars * (1.0 - cover) * smoothstep(0.03, 0.3, d.y);
+            float dot3 = smoothstep(0.34, 0.0, length(fract(g) - 0.5));
+            c += vec3(0.9, 0.95, 1.0) * step(0.994, s) * dot3 * (0.4 + 2.2 * fract(s * 97.0)) * uStars * (1.0 - cover) * smoothstep(0.03, 0.3, d.y);
           }
         }
         if (d.y < 0.0) c = mix(c, uFog, smoothstep(0.0, -0.05, d.y));
