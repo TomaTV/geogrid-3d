@@ -117,7 +117,7 @@ export function tileLayers(key) {
       source: 'trees-' + key,
       filter: ['>', ['get', 'base'], 0.5],
       paint: {
-        'fill-extrusion-color': ['interpolate', ['linear'], ['get', 'tone'], 0, '#2a5a38', 0.5, '#356b42', 1, '#4a7d45'],
+        'fill-extrusion-color': ['interpolate', ['linear'], ['get', 'tone'], 0, '#24502f', 0.5, '#2f6139', 1, '#3d7240'],
         'fill-extrusion-height': ['get', 'top'],
         'fill-extrusion-base': ['get', 'base'],
       },
