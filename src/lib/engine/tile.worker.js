@@ -209,7 +209,7 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster) {
     for (const poly of polygonsOf(f, E)) {
       const outer = poly[0];
       const area = Math.abs(ringArea(outer)) * unit * unit;
-      if (area < 6) continue;
+      if (area < 18) continue;
       let h = top;
       const r0 = hash(Math.round(outer[0][0]), Math.round(outer[0][1]));
       if (h <= 6 && base === 0 && median >= 11 && area > 55) h = median * (0.82 + r0 * 0.3);
@@ -231,7 +231,7 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster) {
       const roofDepth = 3.2;
       let eave = h;
       let inset = null;
-      if (!touchesBorder && poly.length === 1 && base === 0 && h >= 9 && area >= 70 && area <= 7000 && outer.length <= 80) {
+      if (!touchesBorder && poly.length === 1 && base === 0 && h >= 9 && area >= 160 && area <= 7000 && outer.length <= 80) {
         const candidate = insetRing(outer, 2.3 / unit);
         if (validInset(outer, candidate)) {
           inset = candidate;
@@ -437,7 +437,7 @@ function noise(x, y) {
 function plantTrees(greens, lines, E, unit, ox, oz, raster, job) {
   const inst = [];
   const tree = [];
-  const max = 5000;
+  const max = 3000;
   const add = (ex, ez, big, tone) => {
     if (inst.length / 4 >= max) return;
     const n = hash(Math.round(ex * 3), Math.round(ez * 3));
@@ -458,7 +458,7 @@ function plantTrees(greens, lines, E, unit, ox, oz, raster, job) {
       x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]);
       y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]);
     }
-    const step = (dense ? 8.5 : 13) / unit;
+    const step = (dense ? 11 : 16) / unit;
     for (let x = x0; x < x1; x += step) {
       for (let y = y0; y < y1; y += step) {
         const j1 = hash(Math.round(x), Math.round(y));
@@ -477,7 +477,7 @@ function plantTrees(greens, lines, E, unit, ox, oz, raster, job) {
     const first = l.pts[0];
     if (hash(first[0], first[1]) > p) continue;
     const off = (l.width / 2 + 2.8) / unit;
-    const step = 12 / unit;
+    const step = 15 / unit;
     for (let i = 1; i < l.pts.length; i++) {
       const a = l.pts[i - 1];
       const b = l.pts[i];

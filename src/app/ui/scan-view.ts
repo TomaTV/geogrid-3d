@@ -1,4 +1,4 @@
-import { Component, input, signal } from '@angular/core';
+import { Component, input, signal, viewChild } from '@angular/core';
 import { ScanMap } from './scan-map';
 import { RankLegend } from './rank-legend';
 import { formatRank, rankColor } from '../../lib/rank-colors.js';
@@ -9,7 +9,7 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
   template: `
     @if (scan(); as s) {
       <div class="relative h-dvh w-full overflow-hidden">
-        <app-scan-map [scan]="s" [time]="time()" (nodeSelected)="active.set($event)" (ready)="loading.set(false)" (failed)="fail()" />
+        <app-scan-map #map [scan]="s" [time]="time()" (nodeSelected)="active.set($event)" (ready)="loading.set(false)" (failed)="fail()" />
 
         <div class="pointer-events-none absolute z-10 left-4 top-[68px] max-w-[300px] sm:left-6">
           <p class="eyebrow">{{ s.keyword }}</p>
@@ -22,7 +22,7 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
 
         @if (active(); as a) {
           <aside class="absolute z-10 inset-x-3 bottom-3 rounded-2xl border border-white/10 bg-bg/90 p-4 backdrop-blur-2xl sm:inset-x-auto sm:bottom-auto sm:right-6 sm:top-[68px] sm:w-[300px]">
-            <p class="eyebrow">{{ a.hover ? 'Under cursor' : 'Selected' }}</p>
+            <p class="eyebrow">Selected building</p>
             <div class="mt-2 flex items-end justify-between gap-4">
               <div>
                 <p class="eyebrow">Nearest measured point</p>
@@ -57,9 +57,18 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
           </aside>
         }
 
-        <div class="absolute right-4 top-[68px] z-10 flex rounded-xl border border-white/10 bg-[rgba(10,10,12,0.72)] p-1 backdrop-blur-2xl sm:right-6" [class.hidden]="active()">
+        <div class="absolute left-4 top-[186px] z-10 flex w-[42px] flex-col items-center rounded-xl border border-white/10 bg-[rgba(10,10,12,0.78)] py-1 backdrop-blur-2xl sm:left-6">
+          <button type="button" class="rail-btn" aria-label="Zoom in" title="Zoom in" (click)="map.zoom(0.7)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
+          <button type="button" class="rail-btn" aria-label="Zoom out" title="Zoom out" (click)="map.zoom(1.4)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 12h14" /></svg>
+          </button>
+          <span class="my-1 h-px w-6 bg-white/10"></span>
           @for (t of times; track t.id) {
-            <button type="button" class="rounded-lg px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition" [class.bg-white/10]="time() === t.id" [class.text-white]="time() === t.id" [class.text-white/50]="time() !== t.id" (click)="time.set(t.id)">{{ t.label }}</button>
+            <button type="button" class="rail-btn" [class.rail-on]="time() === t.id" [attr.aria-label]="t.label" [attr.aria-pressed]="time() === t.id" [title]="t.label" (click)="time.set(t.id)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path [attr.d]="t.icon" /></svg>
+            </button>
           }
         </div>
 
@@ -79,9 +88,10 @@ export class ScanView {
   active = signal<any>(null);
   time = signal('dusk');
   times = [
-    { id: 'dusk', label: 'Dusk' },
-    { id: 'night', label: 'Night' },
-    { id: 'day', label: 'Day' },
+    { id: 'dusk', label: 'Dusk', icon: 'M3 17h18M6.5 17a5.5 5.5 0 0 1 11 0M12 5v3M4.9 8.9l2 2M19.1 8.9l-2 2M4 21h16' },
+    { id: 'night', label: 'Night', icon: 'M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z' },
+    { id: 'day', label: 'Day', icon: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4' },
+    { id: 'scan', label: 'Scan colors', icon: 'M4 21V9l6-4v16M10 21V3l10 5v13M2 21h20M14 11h2M14 15h2' },
   ];
   loading = signal(true);
   error = signal(false);

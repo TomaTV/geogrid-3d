@@ -126,30 +126,6 @@ body {
 .scan-business i { width: 2px; height: 26px; background: linear-gradient(#22c55e, rgba(34,197,94,0)); }
 
 
-.eng-zoom {
-  position: absolute;
-  right: 16px;
-  bottom: 44px;
-  z-index: 8;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(10, 10, 12, 0.72);
-  backdrop-filter: blur(24px);
-}
-.eng-zoom button {
-  width: 38px;
-  height: 38px;
-  border: 0;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.8);
-  font: 400 18px/1 var(--font-sans);
-  cursor: pointer;
-}
-.eng-zoom button:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
-.eng-zoom button + button { border-top: 1px solid rgba(255, 255, 255, 0.08); }
 .eng-credit {
   position: absolute;
   right: 16px;
@@ -160,3 +136,18 @@ body {
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
 }
 .eng-credit a { color: rgba(255, 255, 255, 0.6); text-decoration: none; }
+
+.rail-btn {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.rail-btn:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+.rail-btn.rail-on { color: #34d399; background: rgba(52, 211, 153, 0.12); }

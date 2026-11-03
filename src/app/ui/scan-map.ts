@@ -14,7 +14,7 @@ export class ScanMap implements OnDestroy {
   failed = output<unknown>();
 
   private host = viewChild.required<ElementRef<HTMLDivElement>>('host');
-  private instance: { destroy: () => void; setTime: (name: string) => void } | null = null;
+  private instance: { destroy: () => void; setTime: (name: string) => void; zoom: (factor: number) => void } | null = null;
 
   constructor() {
     effect(() => {
@@ -31,6 +31,10 @@ export class ScanMap implements OnDestroy {
       const time = this.time();
       untracked(() => this.instance?.setTime(time));
     });
+  }
+
+  zoom(factor: number) {
+    this.instance?.zoom(factor);
   }
 
   ngOnDestroy() {

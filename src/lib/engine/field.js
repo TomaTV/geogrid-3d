@@ -47,7 +47,8 @@ function medianSpacing(pts) {
 export function createField(nodes, proj) {
   const pts = nodes.map((n) => proj.toWorld(n.lng, n.lat));
   const step = medianSpacing(pts);
-  const sigma = step * 1.15;
+  // Comme Geogrid : les points classés se diffusent aux cases voisines, un point hors top 20 reste local.
+  const sigma = Math.max(step * 1.6, 520);
 
   function estimate(x, z) {
     let nearest = [Infinity, 0];
@@ -61,7 +62,8 @@ export function createField(nodes, proj) {
       if (nodes[i].rank == null) continue;
       if (d < measured[0]) measured = [d, i];
       if (d > sigma * 3.2) continue;
-      const wi = Math.exp(-((d / sigma) ** 2));
+      const reach = nodes[i].rank > 20 ? sigma * 0.42 : sigma;
+      const wi = Math.exp(-((d / reach) ** 2));
       w += wi;
       rank += wi * Math.min(nodes[i].rank, RANK_CAP);
       const c = nodeRgb(nodes[i].rank);
@@ -71,11 +73,11 @@ export function createField(nodes, proj) {
     }
     const ref = measured[1] >= 0 ? measured : nearest;
     if (w < 1e-4) return { node: ref[1], dist: ref[0], rank: null, rgb: null, conf: 0 };
-    const t = Math.min(1, w / 0.65);
+    const t = Math.min(1, w / 0.3);
     return { node: ref[1], dist: ref[0], rank: rank / w, rgb: acc.map((v) => v / w), conf: t * t * (3 - 2 * t) };
   }
 
-  const pad = sigma * 2.6;
+  const pad = sigma * 2;
   const xs = pts.map((p) => p[0]);
   const zs = pts.map((p) => p[1]);
   const min = [Math.min(...xs) - pad, Math.min(...zs) - pad];
