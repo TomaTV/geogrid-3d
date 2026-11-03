@@ -112,8 +112,8 @@ export function createMaterials(field) {
           vec2 c = vec2(vWall.x / 3.7, (vWall.y - 0.4) / 3.3);
           vec2 fw = fwidth(c);
           gCell = c;
-          gDetail = 1.0 - smoothstep(0.17, 0.5, max(fw.x, fw.y));
-          float ao = mix(0.45, 1.0, smoothstep(0.0, 9.0, vWall.y));
+          gDetail = 1.0 - smoothstep(0.12, 0.4, max(fw.x, fw.y));
+          float ao = mix(0.32, 1.0, smoothstep(0.0, 10.0, vWall.y));
           float cornice = 0.0;
           float balcony = 0.0;
           if (gDetail > 0.0) {
@@ -183,7 +183,7 @@ export function createMaterials(field) {
       `,
       emissive: /* glsl */ `
         float edge = smoothstep(0.55, 0.8, abs(vRoad.x)) * (1.0 - smoothstep(0.8, 1.0, abs(vRoad.x)));
-        totalEmissiveRadiance += mix(vec3(0.9, 0.6, 0.3) * 0.16, gF.rgb * 0.8, gF.a) * (0.3 + edge) * uNight;
+        totalEmissiveRadiance += mix(vec3(0.9, 0.6, 0.3) * 0.16, gF.rgb * 0.6, gF.a) * (0.12 + 0.75 * edge) * uNight;
         if (vRoad.z > 5.0 && uNight > 0.0) {
           float side = vRoad.x > 0.0 ? 1.0 : -1.0;
           float lane = 1.0 - smoothstep(0.1, 0.22, abs(abs(vRoad.x) - 0.38));

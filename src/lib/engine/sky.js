@@ -2,8 +2,8 @@ import * as THREE from 'three';
 
 export const PRESETS = {
   standard: {
-    elevation: 42, azimuth: 215, sun: '#d3daf0', sunPower: 1.55, envPower: 0.5, night: 0.55, stars: 0.2, sunDisc: 0, hemi: '#7d7c8a',
-    zenith: '#070b14', mid: '#0e1522', horizon: '#18202f', fog: '#10151f', fogDensity: 0.00036, exposure: 1, bloom: 0.14, clouds: '#1a2232',
+    elevation: 40, azimuth: 215, sun: '#b9c6ea', sunPower: 0.85, envPower: 0.3, night: 0.85, stars: 0.35, sunDisc: 0, hemi: '#5d6880',
+    zenith: '#070b14', mid: '#0c1320', horizon: '#141c2b', fog: '#121926', fogDensity: 0.00036, exposure: 1.05, bloom: 0.2, clouds: '#161e2e',
   },
   dusk: {
     elevation: 5.5, azimuth: 248, sun: '#ffa868', sunPower: 3.7, envPower: 0.6, hemi: '#a59ea8', night: 0.72, stars: 0.12, sunDisc: 1,
@@ -14,8 +14,8 @@ export const PRESETS = {
     zenith: '#02050f', mid: '#071024', horizon: '#14233f', fog: '#0c1526', fogDensity: 0.00046, exposure: 1.15, bloom: 0.2, clouds: '#1b2740',
   },
   day: {
-    elevation: 44, azimuth: 205, sun: '#fff0da', sunPower: 3.5, envPower: 0.95, night: 0, stars: 0, sunDisc: 1,
-    zenith: '#2a66b8', mid: '#6ea4dc', horizon: '#d6e6f3', fog: '#bfd2e2', fogDensity: 0.00034, exposure: 0.92, bloom: 0.12, clouds: '#ffffff',
+    elevation: 44, azimuth: 205, sun: '#fff0da', sunPower: 2.3, envPower: 0.42, night: 0, stars: 0, sunDisc: 1,
+    zenith: '#2a66b8', mid: '#6ea4dc', horizon: '#d6e6f3', fog: '#bfd2e2', fogDensity: 0.00034, exposure: 0.86, bloom: 0.06, clouds: '#ffffff',
   },
 };
 
@@ -92,7 +92,7 @@ export function createSky() {
         vec3 horizon = mix(uFog, uHorizon, side);
         vec3 c = mix(horizon, uMid, smoothstep(0.0, 0.2, h));
         c = mix(c, uZenith, smoothstep(0.12, 0.72, h));
-        c = mix(uFog, c, smoothstep(0.0, 0.08, h));
+        c = mix(uFog, c, smoothstep(0.0, 0.18, h));
         c += uSunColor * pow(toSun, 9.0) * 0.32 * uDisc;
         c += uSunColor * pow(toSun, 90.0) * 0.8 * uDisc;
         c += uSunColor * smoothstep(0.99925, 0.99965, toSun) * 26.0 * uDisc;

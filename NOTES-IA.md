@@ -52,6 +52,8 @@ La clé `gk_live_...` a été collée dans une conversation : à révoquer aprè
 
 ## À faire ou à vérifier
 
+0. Wizard : reprendre aussi l'étape 3 de Geogrid (taille de grille, rayon, résumé), demandé par Thomas. UI actuelle : Standard par défaut, Time (Real time, Dusk, Day, Night), Settings (Building colors, Shadows, Low power), recentrage. Couleur du scan au sol, routes, fenêtres, immeubles entiers via Building colors.
+
 1. Fluidité jamais mesurée sur un vrai GPU : les tests tournent en rendu logiciel headless. Thomas doit juger sur sa machine. Leviers : `MAX_NEAR`, rayon de `refreshTiles`, taille de la carte d'ombre, `dpr`.
 2. Création de scan depuis l'assistant et mode live jamais testés de bout en bout.
 3. Mobile 390 px non vérifié avec le nouveau moteur.

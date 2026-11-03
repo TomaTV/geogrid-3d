@@ -17,6 +17,7 @@ const WORKERS = 2;
 const MAX_NEAR = 36;
 const FAR_ZOOM = 11;
 const NEAR_ZOOM = 14;
+const MAX_RANGE = 25000;
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -109,9 +110,9 @@ export function createScanMap(container, scan, options) {
   controls.dampingFactor = 0.12;
   controls.panSpeed = 0.55;
   controls.rotateSpeed = 0.55;
-  controls.maxPolarAngle = THREE.MathUtils.degToRad(86);
+  controls.maxPolarAngle = THREE.MathUtils.degToRad(83);
   controls.minDistance = 35;
-  controls.maxDistance = 16000;
+  controls.maxDistance = 9000;
   controls.enableZoom = false;
   controls.target.set(0, 0, 0);
 
@@ -657,6 +658,7 @@ export function createScanMap(container, scan, options) {
   }
 
   let raf = 0;
+  const lastTarget = new THREE.Vector3();
   let fly = null;
   let liveTimer = null;
   const origin = new THREE.Vector3();
@@ -724,7 +726,7 @@ export function createScanMap(container, scan, options) {
         const rect = el.getBoundingClientRect();
         ndc.set(((zoomCursor[0] - rect.left) / rect.width) * 2 - 1, -((zoomCursor[1] - rect.top) / rect.height) * 2 + 1);
         raycaster.setFromCamera(ndc, camera);
-        if (raycaster.ray.intersectPlane(groundPlane, groundHit) && groundHit.distanceTo(controls.target) < d0 * 4) controls.target.lerp(groundHit, 1 - f);
+        if (raycaster.ray.intersectPlane(groundPlane, groundHit) && groundHit.distanceTo(controls.target) < d0 * 1.2) controls.target.lerp(groundHit, 1 - f);
       }
       camera.position.copy(controls.target).add(offset.multiplyScalar(f));
       changed = true;
@@ -738,6 +740,27 @@ export function createScanMap(container, scan, options) {
       if (t >= 1) fly = null;
     }
     controls.target.y = 0;
+    {
+      // Un glissement ne peut ni dépasser une fraction de la vue par image, ni quitter la zone.
+      const dx = controls.target.x - lastTarget.x;
+      const dz = controls.target.z - lastTarget.z;
+      const moved = Math.hypot(dx, dz);
+      const limit = camera.position.distanceTo(controls.target) * 0.1 + 2;
+      let back = moved > limit ? 1 - limit / moved : 0;
+      const nx = controls.target.x - dx * back;
+      const nz = controls.target.z - dz * back;
+      const range = Math.hypot(nx, nz);
+      const k = range > MAX_RANGE ? MAX_RANGE / range : 1;
+      const fx = nx * k - controls.target.x;
+      const fz = nz * k - controls.target.z;
+      if (!fly && (fx || fz)) {
+        controls.target.x += fx;
+        controls.target.z += fz;
+        camera.position.x += fx;
+        camera.position.z += fz;
+      }
+      lastTarget.copy(controls.target);
+    }
 
     const dist = camera.position.distanceTo(controls.target);
     const near = Math.max(1.5, Math.min(camera.position.y * 0.15, dist * 0.04));
