@@ -11,32 +11,40 @@ type Field = 'address' | 'keyword' | 'business' | 'note';
   selector: 'app-scan-new',
   imports: [ReactiveFormsModule, RouterLink],
   template: `
-    <section class="mx-auto max-w-[720px] px-4 pb-16 sm:px-6">
-      <p class="eyebrow">New scan</p>
-      <h1 class="font-display mt-2 text-[clamp(1.8rem,4vw,2.4rem)] italic leading-[1.1] tracking-[-0.03em]">
-        <span class="font-light text-white/60">Map a</span><span class="font-medium text-white">&nbsp;business</span>
-      </h1>
-      <p class="mt-1.5 text-[13px] text-white/30">
-        @if (source.mode === 'mock') {
-          Mock mode: the result comes from a real scan saved in the project, no credit is used.
-        } @else {
-          Live mode: each point costs one Geogrid credit.
-        }
-      </p>
+    <section class="mx-auto max-w-[1000px] px-4 pb-16 sm:px-6">
+      <div class="mb-6 px-2">
+        <p class="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-white/40">03 · Wizard</p>
+        <h1 class="font-display text-[clamp(1.6rem,4vw,2.2rem)] italic leading-[1.1] tracking-tight"><span class="font-semibold text-white">Three steps</span><span class="font-light text-white/50">&nbsp;to scan.</span></h1>
+        <p class="mt-1.5 text-[12.5px] text-white/30">
+          @if (source.mode === 'mock') {
+            Mock mode: the result comes from a real scan saved in the project, no credit is used.
+          } @else {
+            Live mode: each point costs one Geogrid credit.
+          }
+        </p>
+      </div>
 
-      <ol class="mt-8 grid grid-cols-3 gap-2">
+      <div class="rounded-2xl border border-white/[0.06] bg-[#0a0a0c] p-6 md:p-8">
+      <div class="relative mb-10 mt-2 flex items-center justify-between">
+        <div class="absolute left-10 right-10 top-1/2 h-[2px] -translate-y-1/2 bg-white/5"></div>
+        <div class="absolute left-10 top-1/2 h-[2px] max-w-[calc(100%-80px)] -translate-y-1/2 bg-accent transition-all duration-500" [style.width.%]="((step() - 1) / 2) * 100"></div>
         @for (s of steps; track s.num) {
-          <li class="rounded-xl border px-3.5 py-3 transition"
-              [class.border-accent/40]="step() === s.num" [class.bg-accent/[0.06]]="step() === s.num"
-              [class.border-white/[0.06]]="step() !== s.num">
-            <p class="font-mono text-[9px] uppercase tracking-[0.15em]" [class.text-accent]="step() >= s.num" [class.text-white/30]="step() < s.num">Step 0{{ s.num }}</p>
-            <p class="mt-0.5 text-[13px] font-medium" [class.text-white/40]="step() < s.num">{{ s.label }}</p>
-          </li>
+          <div class="relative z-10 flex items-center gap-3 bg-[#0a0a0c] px-4">
+            <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-all duration-300"
+                 [class.border-accent/50]="step() >= s.num" [class.bg-accent/[0.12]]="step() >= s.num"
+                 [class.border-white/10]="step() < s.num" [class.bg-white/[0.04]]="step() < s.num">
+              <span class="text-[11px] font-bold" [class.text-accent]="step() >= s.num" [class.text-white/30]="step() < s.num">{{ step() > s.num ? '✓' : '0' + s.num }}</span>
+            </div>
+            <div class="hidden sm:block">
+              <div class="font-mono text-[9px] uppercase tracking-[0.15em] text-white/30">Step 0{{ s.num }}</div>
+              <div class="font-display text-[14px] font-medium italic" [class.text-white/40]="step() < s.num">{{ s.label }}</div>
+            </div>
+          </div>
         }
-      </ol>
+      </div>
 
       @if (running()) {
-        <div class="card mt-6 p-6">
+        <div class="py-2">
           <p class="eyebrow">{{ label() }}</p>
           <div class="mt-4 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
             <div class="h-full rounded-full bg-accent transition-[width] duration-700" [style.width.%]="progress() * 100"></div>
@@ -44,33 +52,33 @@ type Field = 'address' | 'keyword' | 'business' | 'note';
           <p class="mt-3 font-mono text-[11px] text-white/40">{{ (progress() * 100).toFixed(0) }}%</p>
         </div>
       } @else {
-        <form class="card mt-6 space-y-5 p-6" [formGroup]="form" (ngSubmit)="next()" novalidate>
+        <form class="space-y-5" [formGroup]="form" (ngSubmit)="next()" novalidate>
           @switch (step()) {
             @case (1) {
               <div>
-                <label class="label" for="address">Address</label>
-                <input id="address" class="input" [class.invalid]="bad('address')" formControlName="address" placeholder="e.g. 10 rue de Rivoli, Paris" />
+                <label class="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30" for="address">Address</label>
+                <input id="address" class="input !h-10 !rounded-lg !py-0 !text-[13px]" [class.invalid]="bad('address')" formControlName="address" placeholder="e.g. 10 rue de Rivoli, Paris" />
                 @if (bad('address')) {
                   <p class="field-error">{{ form.controls.address.hasError('required') ? 'The address is required.' : 'At least 5 characters.' }}</p>
                 }
               </div>
               <div>
-                <label class="label" for="keyword">Keyword</label>
-                <input id="keyword" class="input" [class.invalid]="bad('keyword')" formControlName="keyword" placeholder="e.g. plumber, dentist, pizza" />
+                <label class="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30" for="keyword">Keyword</label>
+                <input id="keyword" class="input !h-10 !rounded-lg !py-0 !text-[13px]" [class.invalid]="bad('keyword')" formControlName="keyword" placeholder="e.g. plumber, dentist, pizza" />
                 @if (bad('keyword')) { <p class="field-error">The keyword is required.</p> }
               </div>
             }
             @case (2) {
               <div>
-                <label class="label" for="business">Business to track</label>
-                <input id="business" class="input" [class.invalid]="bad('business')" formControlName="business" placeholder="Name as it appears on Google Maps" />
+                <label class="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30" for="business">Business to track</label>
+                <input id="business" class="input !h-10 !rounded-lg !py-0 !text-[13px]" [class.invalid]="bad('business')" formControlName="business" placeholder="Name as it appears on Google Maps" />
                 @if (bad('business')) { <p class="field-error">The business is required.</p> }
                 <p class="mt-2 text-[12px] text-white/35">Its Google listing gives the position shown as the green pin in 3D.</p>
               </div>
             }
             @case (3) {
               <div>
-                <span class="label">Grid</span>
+                <span class="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">Grid</span>
                 <div class="flex gap-2">
                   @for (g of grids; track g) {
                     <button type="button" class="btn flex-1" [class.btn-primary]="form.value.grid === g" (click)="form.controls.grid.setValue(g)">{{ g }}x{{ g }} <span class="font-mono text-[10px] opacity-60">{{ g * g }} points</span></button>
@@ -78,7 +86,7 @@ type Field = 'address' | 'keyword' | 'business' | 'note';
                 </div>
               </div>
               <div>
-                <label class="label" for="note">Note (optional)</label>
+                <label class="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30" for="note">Note (optional)</label>
                 <textarea id="note" rows="2" class="input" [class.invalid]="bad('note')" formControlName="note"></textarea>
                 <div class="mt-1 flex justify-between">
                   @if (bad('note')) { <p class="field-error">200 characters maximum.</p> } @else { <span></span> }
@@ -86,7 +94,7 @@ type Field = 'address' | 'keyword' | 'business' | 'note';
                 </div>
               </div>
               <div class="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-                <p class="label">Scan summary</p>
+                <p class="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">Scan summary</p>
                 <dl class="space-y-1.5 text-[13px]">
                   <div class="flex justify-between gap-4"><dt class="text-white/40">Address</dt><dd class="truncate text-right">{{ form.value.address }}</dd></div>
                   <div class="flex justify-between gap-4"><dt class="text-white/40">Keyword</dt><dd class="truncate text-right">{{ form.value.keyword }}</dd></div>
@@ -109,6 +117,7 @@ type Field = 'address' | 'keyword' | 'business' | 'note';
           </div>
         </form>
       }
+      </div>
     </section>
   `,
 })

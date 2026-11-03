@@ -106,7 +106,9 @@ export function createScanMap(container, scan, options) {
 
   const controls = new MapControls(camera, renderer.domElement);
   controls.enableDamping = true;
-  controls.dampingFactor = 0.08;
+  controls.dampingFactor = 0.12;
+  controls.panSpeed = 0.55;
+  controls.rotateSpeed = 0.55;
   controls.maxPolarAngle = THREE.MathUtils.degToRad(86);
   controls.minDistance = 35;
   controls.maxDistance = 16000;
@@ -588,7 +590,7 @@ export function createScanMap(container, scan, options) {
     e.preventDefault();
     endIntro();
     const unit = e.deltaMode === 1 ? 30 : 1;
-    zoomPending += e.deltaY * unit * (e.ctrlKey ? 0.012 : 0.0016);
+    zoomPending += e.deltaY * unit * (e.ctrlKey ? 0.009 : 0.0011);
     zoomCursor = [e.clientX, e.clientY];
   };
   const keys = new Set();
@@ -695,7 +697,7 @@ export function createScanMap(container, scan, options) {
     }
 
     if (keys.size) {
-      const speed = camera.position.distanceTo(controls.target) * 0.9 * delta * (keys.has('ShiftLeft') ? 3 : 1);
+      const speed = camera.position.distanceTo(controls.target) * 0.4 * delta * (keys.has('ShiftLeft') ? 3 : 1);
       camera.getWorldDirection(v);
       v.y = 0;
       v.normalize();

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 export const PRESETS = {
   standard: {
-    elevation: 42, azimuth: 215, sun: '#c7d2ee', sunPower: 1.15, envPower: 0.5, night: 0.55, stars: 0.2, sunDisc: 0, hemi: '#6f7a90',
+    elevation: 42, azimuth: 215, sun: '#d3daf0', sunPower: 1.55, envPower: 0.5, night: 0.55, stars: 0.2, sunDisc: 0, hemi: '#7d7c8a',
     zenith: '#070b14', mid: '#0e1522', horizon: '#18202f', fog: '#10151f', fogDensity: 0.00036, exposure: 1, bloom: 0.14, clouds: '#1a2232',
   },
   dusk: {

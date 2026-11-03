@@ -112,9 +112,10 @@ export function createMaterials(field) {
           vec2 c = vec2(vWall.x / 3.7, (vWall.y - 0.4) / 3.3);
           vec2 fw = fwidth(c);
           gCell = c;
-          gDetail = 1.0 - smoothstep(0.22, 0.6, max(fw.x, fw.y));
+          gDetail = 1.0 - smoothstep(0.1, 0.34, max(fw.x, fw.y));
           float ao = mix(0.45, 1.0, smoothstep(0.0, 9.0, vWall.y));
           float cornice = 0.0;
+          float balcony = 0.0;
           if (gDetail > 0.0) {
             vec2 f = fract(c);
             vec2 aa = clamp(fw * 1.2, 0.01, 0.2);
@@ -122,12 +123,15 @@ export function createMaterials(field) {
             float wy = smoothstep(0.2 - aa.y, 0.2 + aa.y, f.y) * (1.0 - smoothstep(0.84 - aa.y, 0.84 + aa.y, f.y));
             gWin = wx * wy * gDetail * step(3.6, vWall.y);
             cornice = smoothstep(0.1, 0.0, f.y) * gDetail;
+            balcony = step(2.5, mod(floor(c.y), 4.0)) * smoothstep(0.2, 0.12, f.y) * gDetail;
           }
-          diffuseColor.rgb = stone * ao * (1.0 - 0.22 * cornice);
-          diffuseColor.rgb = mix(diffuseColor.rgb, mix(vec3(0.16, 0.2, 0.25), vec3(0.025, 0.03, 0.04), uNight), gWin);
+          float storey = smoothstep(3.6, 3.2, vWall.y);
+          float height01 = clamp(vWall.y / max(vMeta.z, 1.0), 0.0, 1.0);
+          diffuseColor.rgb = stone * ao * (1.0 - 0.22 * cornice) * (1.0 - 0.55 * balcony) * mix(1.0, 0.68, storey) * (0.9 + 0.16 * height01);
+          diffuseColor.rgb = mix(diffuseColor.rgb, mix(vec3(0.16, 0.2, 0.25), vec3(0.02, 0.025, 0.035), smoothstep(0.0, 0.4, uNight)), gWin);
         } else {
           vec3 zinc = mix(vec3(0.17, 0.2, 0.24), vec3(0.3, 0.31, 0.33), fract(seed * 5.1 + cellTone * 0.6));
-          diffuseColor.rgb = zinc;
+          diffuseColor.rgb = mix(zinc, gF.rgb, gF.a * 0.14);
         }
         if (uScan > 0.5) {
           float shade = vMeta.x < 0.5 ? mix(0.62, 1.0, smoothstep(0.0, 12.0, vWall.y)) * (1.0 - gWin * 0.28) : 1.0;
@@ -140,10 +144,13 @@ export function createMaterials(field) {
         if (vMeta.x < 0.5) {
           vec3 warm = vec3(1.0, 0.68, 0.36);
           float rnd = hash21(floor(gCell) + vec2(vMeta.y * 91.0, vMeta.y * 37.0));
-          float density = mix(0.42, 0.85, gF.a * uScan);
-          vec3 win = mix(warm * (0.6 + 0.8 * fract(rnd * 17.0)), gF.rgb * 1.5, gF.a * uScan);
-          totalEmissiveRadiance += win * gWin * step(rnd, density) * uNight * mix(1.8, 0.9, uScan);
-          totalEmissiveRadiance += mix(warm * 0.35, gF.rgb * 0.9, gF.a * uScan) * (1.0 - gDetail) * density * 0.36 * uNight;
+          float rnd2 = fract(rnd * 53.7);
+          float density = 0.36 + 0.26 * gF.a;
+          vec3 tint = rnd2 > 0.95 ? vec3(0.68, 0.8, 1.0) : mix(vec3(1.0, 0.6, 0.28), vec3(1.0, 0.8, 0.56), fract(rnd * 17.0));
+          float scanned = max(step(rnd2, gF.a * 0.6), gF.a * uScan);
+          vec3 win = mix(tint, gF.rgb * 1.3, scanned);
+          totalEmissiveRadiance += win * gWin * step(rnd, density) * uNight * (0.65 + 0.65 * fract(rnd * 31.0)) * mix(1.25, 0.9, uScan);
+          totalEmissiveRadiance += mix(warm * 0.3, gF.rgb * 0.8, gF.a * mix(0.55, 1.0, uScan)) * (1.0 - gDetail) * density * 0.42 * uNight;
           float shop = (1.0 - smoothstep(3.0, 3.5, vWall.y)) * smoothstep(0.6, 1.2, vWall.y);
           totalEmissiveRadiance += warm * shop * step(0.45, fract(floor(vWall.x * 0.14) * 0.37 + vMeta.y * 9.0)) * uNight * 1.1;
         } else {
@@ -184,6 +191,8 @@ export function createMaterials(field) {
           float visible = 1.0 - smoothstep(0.0, 0.5, fwidth(vRoad.y) / 8.0);
           vec3 tone = side > 0.0 ? vec3(1.0, 0.9, 0.75) : vec3(1.0, 0.12, 0.08);
           totalEmissiveRadiance += tone * smoothstep(0.05, 0.0, abs(flow - 0.5)) * lane * visible * uNight * 3.5;
+          float lamp = smoothstep(0.07, 0.0, abs(fract(vRoad.y / 27.0) - 0.5)) * smoothstep(0.14, 0.0, abs(abs(vRoad.x) - 0.88));
+          totalEmissiveRadiance += vec3(1.0, 0.72, 0.42) * lamp * visible * uNight * 2.6;
         }
         totalEmissiveRadiance += vec3(0.4, 1.0, 0.75) * revealRing(vW.xz) * 2.0;
       `,
