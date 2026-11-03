@@ -21,23 +21,12 @@ function inRing(x, y, ring) {
   return inside;
 }
 
-function disc(lng, lat, rMeters, sides, dLat, dLng) {
-  const ring = [];
-  for (let i = 0; i <= sides; i++) {
-    const a = (i / sides) * Math.PI * 2;
-    ring.push([lng + Math.cos(a) * rMeters * dLng, lat + Math.sin(a) * rMeters * dLat]);
-  }
-  return { type: 'Polygon', coordinates: [ring] };
-}
-
-export function growTrees(greens, bounds, { spacing = 12, max = 4500 } = {}) {
+export function growTrees(greens, bounds, { spacing = 11, max = 4500 } = {}) {
   const lat0 = (bounds.south + bounds.north) / 2;
   const dLat = (1 / R) * (180 / Math.PI);
   const dLng = dLat / Math.cos((lat0 * Math.PI) / 180);
-  const canopy = [];
-  const trunks = [];
-  let n = 0;
-  for (let gi = 0; gi < greens.length && n < max; gi++) {
+  const points = [];
+  for (let gi = 0; gi < greens.length && points.length < max; gi++) {
     const g = greens[gi].geometry;
     if (!g || (g.type !== 'Polygon' && g.type !== 'MultiPolygon')) continue;
     const ring = g.type === 'Polygon' ? g.coordinates[0] : g.coordinates[0][0];
@@ -53,16 +42,11 @@ export function growTrees(greens, bounds, { spacing = 12, max = 4500 } = {}) {
         const py = y + (rand() - 0.5) * stepLat * 0.9;
         if (px < bounds.west || px > bounds.east || py < bounds.south || py > bounds.north) continue;
         if (!inRing(px, py, ring)) continue;
-        const r = 3.4 + rand() * 3;
-        const h = 5 + rand() * 5;
-        const tone = rand();
-        canopy.push({ type: 'Feature', geometry: disc(px, py, r, 8, dLat, dLng), properties: { top: h + 2.4, base: 2.4, tone } });
-        canopy.push({ type: 'Feature', geometry: disc(px, py, r * 0.62, 7, dLat, dLng), properties: { top: h * 1.15 + 2.4, base: h * 0.6 + 2.4, tone } });
-        trunks.push({ type: 'Feature', geometry: disc(px, py, 0.45, 5, dLat, dLng), properties: { top: 3.4, base: 0, tone } });
+        points.push({ position: [px, py], radius: 3 + rand() * 2.8, height: 7 + rand() * 6, tone: rand() });
         count++;
-        if (++n >= max) break;
+        if (points.length >= max) break;
       }
     }
   }
-  return { canopy: { type: 'FeatureCollection', features: canopy }, trunks: { type: 'FeatureCollection', features: trunks } };
+  return { points };
 }

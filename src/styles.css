@@ -146,3 +146,5 @@ body {
   mix-blend-mode: screen;
   opacity: 0;
 }
+
+.maplibregl-marker { z-index: 5; }

@@ -1,5 +1,6 @@
 import * as maplibregl from 'maplibre-gl';
-import { buildStyle, overlayLayers, tileLayers, IDS, SUN_AZIMUTH } from './map-style.js';
+import { buildStyle, overlayLayers, IDS, SUN_AZIMUTH } from './map-style.js';
+import { createDeck, tileDeckLayers } from './deck-layers.js';
 import { gridStep, makeEstimator, rankBuildings, scanBounds } from './building-ranks.js';
 import { loadTile, tileAt, tileDistance, tileKey } from './buildings.js';
 import { growTrees } from './trees.js';
@@ -63,6 +64,8 @@ export function createScanMap(container, scan, { onNodeSelect, onReady, onError 
   });
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
 
+  const overlay = createDeck();
+  map.addControl(overlay);
   const tiles = new Map();
   const pending = new Set();
   let orbit = null;
@@ -93,45 +96,49 @@ export function createScanMap(container, scan, { onNodeSelect, onReady, onError 
 
   function build(data, bucket) {
     const { west, east, north, south } = data.bbox;
-    if (bucket === 2) return { buildings: { type: 'FeatureCollection', features: [] }, trees: { type: 'FeatureCollection', features: [] } };
+    if (bucket === 2) return { buildings: { type: "FeatureCollection", features: [] }, trees: [] };
     const minHeight = [0, 6][bucket];
     const own = data.buildings.filter((f) => {
       const [lng, lat] = ringCenter(f.geometry);
-      return lng >= west && lng < east && lat <= north && lat > south && (f.properties.render_height ?? 8) >= minHeight;
+      return (
+        lng >= west && lng < east && lat <= north && lat > south &&
+        (f.properties.render_min_height ?? 0) === 0 &&
+        (f.properties.render_height ?? 8) >= minHeight
+      );
     });
-    const trees = bucket > 0 ? { trunks: { features: [] }, canopy: { features: [] } } : growTrees(data.green, data.bbox);
     return {
-      buildings: { type: 'FeatureCollection', features: rankBuildings(own, estimate) },
-      trees: { type: 'FeatureCollection', features: [...trees.trunks.features, ...trees.canopy.features] },
+      buildings: { type: "FeatureCollection", features: rankBuildings(own, estimate) },
+      trees: bucket > 0 ? [] : growTrees(data.green, data.bbox).points,
     };
+  }
+
+  function renderDeck() {
+    overlay.setProps({ layers: [...tiles.values()].flatMap((t) => t.layers) });
   }
 
   function addTile(x, y, data, distance) {
     const key = tileKey(x, y);
     if (destroyed || tiles.has(key)) return;
     const bucket = bucketFor(distance);
-    const built = build(data, bucket);
-    map.addSource('buildings-' + key, { type: 'geojson', data: built.buildings });
-    map.addSource('trees-' + key, { type: 'geojson', data: built.trees });
-    for (const l of tileLayers(key)) map.addLayer(l, IDS.ring);
-    tiles.set(key, { x, y, data, bucket });
+    tiles.set(key, { x, y, data, bucket, layers: tileDeckLayers(key, build(data, bucket)) });
+    renderDeck();
   }
 
   function relod(c) {
+    let changed = false;
     for (const [key, t] of tiles) {
       const bucket = bucketFor(tileDistance(t.x, t.y, c.lng, c.lat));
       if (bucket === t.bucket) continue;
-      const built = build(t.data, bucket);
-      map.getSource('buildings-' + key)?.setData(built.buildings);
-      map.getSource('trees-' + key)?.setData(built.trees);
+      t.layers = tileDeckLayers(key, build(t.data, bucket));
       t.bucket = bucket;
+      changed = true;
     }
+    if (changed) renderDeck();
   }
 
   function dropTile(key) {
-    for (const l of tileLayers(key)) if (map.getLayer(l.id)) map.removeLayer(l.id);
-    for (const s of ['buildings-' + key, 'trees-' + key]) if (map.getSource(s)) map.removeSource(s);
     tiles.delete(key);
+    renderDeck();
   }
 
   function visibleTiles() {
@@ -199,14 +206,11 @@ export function createScanMap(container, scan, { onNodeSelect, onReady, onError 
     }, 350);
   };
 
-  const buildingLayerIds = () => [...tiles.keys()].map((k) => 'buildings-' + k).filter((id) => map.getLayer(id));
-
   function pick(e) {
-    const ids = buildingLayerIds();
-    if (!ids.length) return null;
-    const f = map.queryRenderedFeatures(e.point, { layers: ids })[0];
-    if (!f) return null;
-    const p = f.properties;
+    if (!tiles.size) return null;
+    const info = overlay.pickObject({ x: e.point.x, y: e.point.y, radius: 2 });
+    if (!info || !info.object || info.object.properties?.node === undefined) return null;
+    const p = info.object.properties;
     const n = nodes[p.node];
     return {
       index: p.node,

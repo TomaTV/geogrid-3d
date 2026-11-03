@@ -11,7 +11,7 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
       <div class="relative h-dvh w-full overflow-hidden">
         <app-scan-map [scan]="s" (nodeSelected)="active.set($event)" (ready)="loading.set(false)" (failed)="fail()" />
 
-        <div class="pointer-events-none absolute left-4 top-[68px] max-w-[300px] sm:left-6">
+        <div class="pointer-events-none absolute z-10 left-4 top-[68px] max-w-[300px] sm:left-6">
           <p class="eyebrow">{{ s.keyword }}</p>
           <h1 class="display mt-1 text-[28px] drop-shadow-[0_2px_14px_rgba(0,0,0,0.7)]">{{ s.target_name }}</h1>
           <a [href]="geogridUrl(s.id)" target="_blank" rel="noopener"
@@ -21,7 +21,7 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
         </div>
 
         @if (active(); as a) {
-          <aside class="absolute inset-x-3 bottom-3 rounded-2xl border border-white/10 bg-bg/90 p-4 backdrop-blur-2xl sm:inset-x-auto sm:bottom-auto sm:right-6 sm:top-[68px] sm:w-[300px]">
+          <aside class="absolute z-10 inset-x-3 bottom-3 rounded-2xl border border-white/10 bg-bg/90 p-4 backdrop-blur-2xl sm:inset-x-auto sm:bottom-auto sm:right-6 sm:top-[68px] sm:w-[300px]">
             <p class="eyebrow">{{ a.hover ? 'Under cursor' : 'Selected' }}</p>
             <div class="mt-2 flex items-end justify-between gap-4">
               <div>
@@ -57,7 +57,7 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
           </aside>
         }
 
-        <app-rank-legend class="pointer-events-none absolute bottom-3 left-1/2 hidden -translate-x-1/2 rounded-full border border-white/10 bg-bg/80 px-4 py-2 backdrop-blur-xl sm:flex" />
+        <app-rank-legend class="pointer-events-none absolute z-10 bottom-3 left-1/2 hidden -translate-x-1/2 rounded-full border border-white/10 bg-bg/80 px-4 py-2 backdrop-blur-xl sm:flex" />
 
         @if (error()) {
           <div class="absolute inset-0 grid place-items-center bg-bg/80"><p class="eyebrow text-red-300/80">Buildings could not be loaded</p></div>

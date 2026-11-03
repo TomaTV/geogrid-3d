@@ -101,37 +101,3 @@ export function overlayLayers() {
     },
   ];
 }
-
-export function tileLayers(key) {
-  return [
-    {
-      id: 'trunks-' + key,
-      type: 'fill-extrusion',
-      source: 'trees-' + key,
-      filter: ['<=', ['get', 'base'], 0.5],
-      paint: { 'fill-extrusion-color': '#3a2c20', 'fill-extrusion-height': ['get', 'top'], 'fill-extrusion-base': ['get', 'base'] },
-    },
-    {
-      id: 'canopy-' + key,
-      type: 'fill-extrusion',
-      source: 'trees-' + key,
-      filter: ['>', ['get', 'base'], 0.5],
-      paint: {
-        'fill-extrusion-color': ['interpolate', ['linear'], ['get', 'tone'], 0, '#24502f', 0.5, '#2f6139', 1, '#3d7240'],
-        'fill-extrusion-height': ['get', 'top'],
-        'fill-extrusion-base': ['get', 'base'],
-      },
-    },
-    {
-      id: 'buildings-' + key,
-      type: 'fill-extrusion',
-      source: 'buildings-' + key,
-      paint: {
-        'fill-extrusion-color': ['get', 'color'],
-        'fill-extrusion-height': ['get', 'height'],
-        'fill-extrusion-base': ['get', 'base'],
-        'fill-extrusion-opacity': 1,
-      },
-    },
-  ];
-}
