@@ -9,7 +9,7 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
   template: `
     @if (scan(); as s) {
       <div class="relative h-dvh w-full overflow-hidden">
-        <app-scan-map [scan]="s" (nodeSelected)="active.set($event)" (ready)="loading.set(false)" (failed)="fail()" />
+        <app-scan-map [scan]="s" [time]="time()" (nodeSelected)="active.set($event)" (ready)="loading.set(false)" (failed)="fail()" />
 
         <div class="pointer-events-none absolute z-10 left-4 top-[68px] max-w-[300px] sm:left-6">
           <p class="eyebrow">{{ s.keyword }}</p>
@@ -39,7 +39,7 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
             @if (a.est !== null) {
               <p class="mt-2 font-mono text-[11px] text-white/45">Estimated here about #{{ a.est }} (interpolated)</p>
             }
-            <p class="mt-1 font-mono text-[11px] text-white/45">Building height {{ a.height }} m</p>
+            <p class="mt-1 font-mono text-[11px] text-white/45">Building height about {{ a.height }} m</p>
             @if (a.node.competitors?.length) {
               <div class="mt-4 border-t border-white/[0.06] pt-3">
                 <p class="eyebrow">Ahead of you here</p>
@@ -53,9 +53,15 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
                 </ul>
               </div>
             }
-            <p class="mt-3 text-[11px] leading-snug text-white/30">Rank is measured at the dots. Colors between dots are interpolated.</p>
+            <p class="mt-3 text-[11px] leading-snug text-white/30">Rank is measured at Geogrid points only. The glow between them is an estimate, with an organic spread.</p>
           </aside>
         }
+
+        <div class="absolute right-4 top-[68px] z-10 flex rounded-xl border border-white/10 bg-[rgba(10,10,12,0.72)] p-1 backdrop-blur-2xl sm:right-6" [class.hidden]="active()">
+          @for (t of times; track t.id) {
+            <button type="button" class="rounded-lg px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition" [class.bg-white/10]="time() === t.id" [class.text-white]="time() === t.id" [class.text-white/50]="time() !== t.id" (click)="time.set(t.id)">{{ t.label }}</button>
+          }
+        </div>
 
         <app-rank-legend class="pointer-events-none absolute z-10 bottom-3 left-1/2 hidden -translate-x-1/2 rounded-full border border-white/10 bg-bg/80 px-4 py-2 backdrop-blur-xl sm:flex" />
 
@@ -71,6 +77,12 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
 export class ScanView {
   scan = input.required<any>();
   active = signal<any>(null);
+  time = signal('dusk');
+  times = [
+    { id: 'dusk', label: 'Dusk' },
+    { id: 'night', label: 'Night' },
+    { id: 'day', label: 'Day' },
+  ];
   loading = signal(true);
   error = signal(false);
   fmt = formatRank;

@@ -55,7 +55,7 @@ export class App {
     { initialValue: this.router.url },
   );
   immersive = () => {
-    const u = this.url();
+    const u = this.url().split('?')[0];
     return u === '/' || /^\/scans\/(?!new)[^/]+$/.test(u);
   };
 }

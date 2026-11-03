@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnDestroy, effect, input, output, viewChild } from '@angular/core';
+import { Component, ElementRef, OnDestroy, effect, input, output, untracked, viewChild } from '@angular/core';
 import { createScanMap } from '../../lib/scan-map.js';
 
 @Component({
@@ -8,22 +8,28 @@ import { createScanMap } from '../../lib/scan-map.js';
 })
 export class ScanMap implements OnDestroy {
   scan = input.required<any>();
+  time = input('dusk');
   nodeSelected = output<{ index: number; node: any; hover: boolean } | null>();
   ready = output<{ buildings: number }>();
   failed = output<unknown>();
 
   private host = viewChild.required<ElementRef<HTMLDivElement>>('host');
-  private instance: { destroy: () => void } | null = null;
+  private instance: { destroy: () => void; setTime: (name: string) => void } | null = null;
 
   constructor() {
     effect(() => {
       const scan = this.scan();
       this.instance?.destroy();
       this.instance = createScanMap(this.host().nativeElement, scan, {
+        time: untracked(this.time),
         onNodeSelect: (e: any) => this.nodeSelected.emit(e),
         onReady: (e: any) => this.ready.emit(e),
         onError: (e: unknown) => this.failed.emit(e),
       });
+    });
+    effect(() => {
+      const time = this.time();
+      untracked(() => this.instance?.setTime(time));
     });
   }
 
