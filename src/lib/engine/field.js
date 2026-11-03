@@ -81,7 +81,8 @@ function medianSpacing(pts) {
 export function createField(nodes, proj) {
   const pts = nodes.map((n) => proj.toWorld(n.lng, n.lat));
   const step = medianSpacing(pts);
-  // Comme Geogrid : les points classés se diffusent aux cases voisines, un point hors top 20 reste local.
+  // Comme les cases estimées de Geogrid : toute la zone du scan reçoit une estimation, seul le bord s'estompe.
+  const reach = Math.max(...pts.map((p) => Math.hypot(p[0], p[1]))) + 150;
   const sigma = Math.max(step * 1.6, 520);
 
   // Source unique : la couleur affichée sur la ville et le rang du panneau sortent de ce calcul.
@@ -97,26 +98,25 @@ export function createField(nodes, proj) {
       if (real < nearest[0]) nearest = [real, i];
       if (nodes[i].rank == null) continue;
       if (real < measured[0]) measured = [real, i];
-      const d = Math.hypot(pts[i][0] - wx, pts[i][1] - wz);
-      if (d > sigma * 3.2) continue;
+      const d = Math.max(Math.hypot(pts[i][0] - wx, pts[i][1] - wz), 60);
+      const wi = 1 / d ** 3;
       if (nodes[i].rank > 20) {
-        unranked += Math.exp(-((d / (sigma * 0.42)) ** 2));
+        unranked += wi * 0.45;
       } else {
-        const wi = Math.exp(-((d / sigma) ** 2));
         ranked += wi;
         sum += wi * nodes[i].rank;
       }
     }
     const ref = measured[1] >= 0 ? measured : nearest;
     const w = ranked + unranked;
-    if (w < 1e-4) return { node: ref[1], dist: ref[0], rank: null, outOfTop: false, rgb: null, conf: 0 };
+    if (w === 0) return { node: ref[1], dist: ref[0], rank: null, outOfTop: false, rgb: null, conf: 0 };
     const outOfTop = unranked > ranked;
     const rank = ranked > 0 ? sum / ranked : null;
-    const t = Math.min(1, w / 0.3);
+    const t = Math.min(1, Math.max(0, (reach + 350 - Math.hypot(wx, wz)) / 700));
     return { node: ref[1], dist: ref[0], rank, outOfTop, rgb: outOfTop || rank == null ? UNRANKED_RGB : rankRgb(rank), conf: t * t * (3 - 2 * t) };
   }
 
-  const pad = sigma * 2;
+  const pad = Math.max(sigma * 2, 1800);
   const xs = pts.map((p) => p[0]);
   const zs = pts.map((p) => p[1]);
   const min = [Math.min(...xs) - pad, Math.min(...zs) - pad];

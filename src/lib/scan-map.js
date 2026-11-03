@@ -14,7 +14,7 @@ import { PRESETS, createSky, livePreset, sunDirection } from './engine/sky.js';
 
 const TILES_URL = 'https://tiles.openfreemap.org/planet';
 const WORKERS = 2;
-const MAX_NEAR = 36;
+const MAX_NEAR = 90;
 const FAR_ZOOM = 11;
 const NEAR_ZOOM = 14;
 const MAX_RANGE = 25000;
@@ -229,7 +229,7 @@ export function createScanMap(container, scan, options) {
   const exclude = [[...proj.toWorld(2.2945, 48.85826), 135]];
   const look = new THREE.Vector3();
   const focusTo = new THREE.Vector2();
-  const focusRadius = (dist) => THREE.MathUtils.clamp(dist * 2.2, 2600, 3700);
+  const focusRadius = (dist) => (introDone ? THREE.MathUtils.clamp(dist * 2.4, 3000, 7000) : 3200);
   function refreshTiles() {
     if (!template) return;
     const t = controls.target;
@@ -271,6 +271,8 @@ export function createScanMap(container, scan, options) {
     for (const w of workers) if (!w.busy) launch(w);
 
     const near = [...tiles.values()].filter((e) => e.z === NEAR_ZOOM);
+    // Au zoom avant, on rend la mémoire des tuiles sorties largement du cercle.
+    for (const e of near) if (Math.hypot(e.cx - t.x, e.cz - t.z) > R * 1.5 + size) dropTile(e);
     if (near.length > MAX_NEAR) {
       near
         .map((e) => [e, Math.hypot(e.cx - t.x, e.cz - t.z)])

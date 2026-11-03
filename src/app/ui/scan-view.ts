@@ -69,6 +69,8 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
           <button type="button" class="rail-btn" [class.rail-on]="time() === 'standard'" aria-label="Standard" data-tip="Standard" (click)="time.set('standard'); menu.set(null)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18V3Z" /></svg></button>
           <button type="button" class="rail-btn" [class.rail-on]="time() !== 'standard'" aria-label="Time" data-tip="Time" (click)="toggle('time')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM12 7v5l3 2" /></svg></button>
           <button type="button" class="rail-btn" [class.rail-on]="menu() === 'settings'" aria-label="Settings" data-tip="Settings" (click)="toggle('settings')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 5v4h4V5h-4ZM6 15v4h4v-4H6Z" /></svg></button>
+          <span class="my-1 h-px w-6 bg-white/10"></span>
+          <button type="button" class="rail-btn" [class.rail-on]="scanColors()" [attr.aria-pressed]="scanColors()" aria-label="Building colors" [attr.data-tip]="scanColors() ? 'Building colors: on' : 'Building colors: off'" (click)="scanColors.set(!scanColors())"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V9l6-4v16M10 21V3l10 5v13M2 21h20M14 11h2M14 15h2" /></svg></button>
         </div>
 
         @if (menu() === 'time') {

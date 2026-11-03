@@ -135,11 +135,11 @@ export function createMaterials(field) {
         }
         if (uScan > 0.5) {
           float shade = vMeta.x < 0.5 ? mix(0.62, 1.0, smoothstep(0.0, 12.0, vWall.y)) * (1.0 - gWin * 0.28) : 1.0;
-          diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * shade, smoothstep(0.03, 0.55, gF.a));
+          diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * shade * 0.85, smoothstep(0.03, 0.55, gF.a) * 0.9);
         }
       `,
       emissive: /* glsl */ `
-        if (uScan > 0.5) totalEmissiveRadiance += gF.rgb * smoothstep(0.03, 0.55, gF.a) * (0.03 + 0.08 * uNight);
+        if (uScan > 0.5) totalEmissiveRadiance += gF.rgb * smoothstep(0.03, 0.55, gF.a) * (0.04 + 0.1 * uNight);
         if (vMeta.x < 0.5 && uScan < 0.5) totalEmissiveRadiance += gF.rgb * gF.a * (1.0 - smoothstep(0.0, 13.0, vWall.y)) * (0.05 + 0.12 * uNight);
         if (vMeta.x < 0.5) {
           vec3 warm = vec3(1.0, 0.68, 0.36);
