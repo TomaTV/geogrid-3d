@@ -192,16 +192,11 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster) {
   const heights = [];
   const center = [];
   const feats = [];
-  const known = [];
   for (let i = 0; i < layer.length; i++) {
     const f = layer.feature(i);
     if (f.type !== 3 || f.properties.hide_3d === true) continue;
-    const h = Number(f.properties.render_height ?? 0);
-    if (h > 6) known.push(h);
     feats.push(f);
   }
-  known.sort((a, b) => a - b);
-  const median = known.length > 12 ? known[known.length >> 1] : 0;
 
   for (let fi = 0; fi < feats.length; fi++) {
     const f = feats[fi];
@@ -213,7 +208,8 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster) {
       if (area < 18) continue;
       let h = top;
       const r0 = hash(Math.round(outer[0][0]), Math.round(outer[0][1]));
-      if (h <= 6 && base === 0 && median >= 11 && area > 55) h = median * (0.82 + r0 * 0.3);
+      // Hauteur absente dans OSM : estimée depuis l'empreinte seule. Une valeur par tuile créait des zones carrées visibles.
+      if (h <= 6 && base === 0 && area > 55) h = Math.min(5 + Math.sqrt(area) * 0.6, 22) * (0.85 + r0 * 0.3);
       if (h <= base) continue;
       raster.fill(outer, 1);
 
