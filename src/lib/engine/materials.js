@@ -68,10 +68,13 @@ function depthPatch(uniforms, head, body, key) {
 }
 
 const GROW = /* glsl */ `
+float rim = smoothstep(uFocusR, uFocusR * 0.86, length((modelMatrix * vec4(aCenter.x, 0.0, aCenter.y, 1.0)).xz - uFocus));
 float grow = clamp((uTime - aMeta.w) / 1.3, 0.0, 1.0);
-grow = 1.0 - pow(1.0 - grow, 3.0);
-transformed.y *= max(grow, 0.002);
+grow = (1.0 - pow(1.0 - grow, 3.0)) * rim;
+if (rim <= 0.0) transformed = vec3(aCenter.x, 0.0, aCenter.y);
+else transformed.y *= max(grow, 0.002);
 `;
+const FOCUS = 'uniform vec2 uFocus; uniform float uFocusR;';
 
 export function createMaterials(field) {
   const uniforms = {
@@ -82,13 +85,15 @@ export function createMaterials(field) {
     uNight: { value: 1 },
     uScan: { value: 0 },
     uTime: { value: 0 },
+    uFocus: { value: new THREE.Vector2() },
+    uFocusR: { value: 5000 },
   };
 
   const building = patch(
     new THREE.MeshLambertMaterial(),
     {
       uniforms,
-      vertexHead: 'attribute vec2 aWall; attribute vec4 aMeta; varying vec2 vWall; varying vec4 vMeta; uniform float uTime;',
+      vertexHead: `attribute vec2 aWall; attribute vec2 aCenter; attribute vec4 aMeta; varying vec2 vWall; varying vec4 vMeta; uniform float uTime; ${FOCUS}`,
       vertexBody: `${GROW}\nvWall = aWall; vMeta = aMeta;`,
       fragmentHead: 'varying vec2 vWall; varying vec4 vMeta; float gWin; float gDetail; vec2 gCell; vec4 gF;',
       color: /* glsl */ `
@@ -127,14 +132,14 @@ export function createMaterials(field) {
         }
       `,
       emissive: /* glsl */ `
-        if (uScan > 0.5) totalEmissiveRadiance += gF.rgb * smoothstep(0.03, 0.55, gF.a) * (0.05 + 0.2 * uNight);
+        if (uScan > 0.5) totalEmissiveRadiance += gF.rgb * smoothstep(0.03, 0.55, gF.a) * (0.03 + 0.08 * uNight);
         if (vMeta.x < 0.5) {
           vec3 warm = vec3(1.0, 0.68, 0.36);
           float rnd = hash21(floor(gCell) + vec2(vMeta.y * 91.0, vMeta.y * 37.0));
           float density = mix(0.3, 0.85, gF.a);
-          vec3 win = mix(warm * (0.6 + 0.8 * fract(rnd * 17.0)), gF.rgb * 2.6, gF.a);
-          totalEmissiveRadiance += win * gWin * step(rnd, density) * uNight * 2.4;
-          totalEmissiveRadiance += mix(warm * 0.35, gF.rgb * 1.5, gF.a) * (1.0 - gDetail) * density * 0.42 * uNight;
+          vec3 win = mix(warm * (0.6 + 0.8 * fract(rnd * 17.0)), gF.rgb * 1.5, gF.a);
+          totalEmissiveRadiance += win * gWin * step(rnd, density) * uNight * mix(1.8, 0.9, uScan);
+          totalEmissiveRadiance += mix(warm * 0.35, gF.rgb * 0.9, gF.a) * (1.0 - gDetail) * density * 0.36 * uNight;
           float shop = (1.0 - smoothstep(3.0, 3.5, vWall.y)) * smoothstep(0.6, 1.2, vWall.y);
           totalEmissiveRadiance += warm * shop * step(0.45, fract(floor(vWall.x * 0.14) * 0.37 + vMeta.y * 9.0)) * uNight * 1.1;
         } else {
@@ -145,7 +150,7 @@ export function createMaterials(field) {
     },
     'building',
   );
-  const buildingDepth = depthPatch(uniforms, 'attribute vec4 aMeta; uniform float uTime;', GROW, 'building-depth');
+  const buildingDepth = depthPatch(uniforms, `attribute vec2 aCenter; attribute vec4 aMeta; uniform float uTime; ${FOCUS}`, GROW, 'building-depth');
 
   const groundOpts = { depthTest: false, depthWrite: false };
 
@@ -167,7 +172,7 @@ export function createMaterials(field) {
       `,
       emissive: /* glsl */ `
         float edge = smoothstep(0.55, 0.8, abs(vRoad.x)) * (1.0 - smoothstep(0.8, 1.0, abs(vRoad.x)));
-        totalEmissiveRadiance += mix(vec3(0.9, 0.6, 0.3) * 0.16, gF.rgb * 1.6, gF.a) * (0.35 + edge) * uNight;
+        totalEmissiveRadiance += mix(vec3(0.9, 0.6, 0.3) * 0.16, gF.rgb * 0.8, gF.a) * (0.3 + edge) * uNight;
         if (vRoad.z > 5.0 && uNight > 0.0) {
           float side = vRoad.x > 0.0 ? 1.0 : -1.0;
           float lane = 1.0 - smoothstep(0.1, 0.22, abs(abs(vRoad.x) - 0.38));
@@ -183,7 +188,7 @@ export function createMaterials(field) {
   );
 
   const groundEmission = /* glsl */ `
-    totalEmissiveRadiance += gF.rgb * gF.a * (0.05 + 0.2 * uNight);
+    totalEmissiveRadiance += gF.rgb * gF.a * (0.03 + 0.08 * uNight);
     totalEmissiveRadiance += vec3(0.4, 1.0, 0.75) * revealRing(vW.xz) * 2.0;
   `;
 
@@ -233,7 +238,7 @@ export function createMaterials(field) {
 
   const TREE_V = /* glsl */ `
     float tg = clamp((uTime - aTree.y) / 1.1, 0.0, 1.0);
-    tg = 1.0 - pow(1.0 - tg, 3.0);
+    tg = (1.0 - pow(1.0 - tg, 3.0)) * smoothstep(uFocusR, uFocusR * 0.86, length((modelMatrix * vec4(aInst.x, 0.0, aInst.y, 1.0)).xz - uFocus));
     transformed = vec3(transformed.x * aInst.z, transformed.y * aInst.w, transformed.z * aInst.z) * tg + vec3(aInst.x, 0.0, aInst.y);
   `;
   const tree = patch(
@@ -241,7 +246,7 @@ export function createMaterials(field) {
     {
       uniforms,
       warp: false,
-      vertexHead: 'attribute vec4 aInst; attribute vec2 aTree; uniform float uTime; varying float vTreeY; varying float vTone;',
+      vertexHead: `attribute vec4 aInst; attribute vec2 aTree; uniform float uTime; ${FOCUS} varying float vTreeY; varying float vTone;`,
       vertexBody: `vTreeY = position.y; vTone = aTree.x;\n${TREE_V}`,
       fragmentHead: 'varying float vTreeY; varying float vTone;',
       color: /* glsl */ `
@@ -255,7 +260,7 @@ export function createMaterials(field) {
     },
     'tree',
   );
-  const treeDepth = depthPatch(uniforms, 'attribute vec4 aInst; attribute vec2 aTree; uniform float uTime;', TREE_V, 'tree-depth');
+  const treeDepth = depthPatch(uniforms, `attribute vec4 aInst; attribute vec2 aTree; uniform float uTime; ${FOCUS}`, TREE_V, 'tree-depth');
 
   return { uniforms, building, buildingDepth, roads, green, land, water, tree, treeDepth };
 }

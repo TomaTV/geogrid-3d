@@ -151,3 +151,19 @@ body {
 }
 .rail-btn:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
 .rail-btn.rail-on { color: #34d399; background: rgba(52, 211, 153, 0.12); }
+.rail-btn { position: relative; }
+.rail-btn[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  padding: 4px 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(10, 10, 12, 0.9);
+  color: rgba(255, 255, 255, 0.85);
+  font: 500 11.5px var(--font-sans);
+  pointer-events: none;
+}

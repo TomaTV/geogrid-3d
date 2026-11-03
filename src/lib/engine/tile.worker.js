@@ -190,6 +190,7 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster) {
   const starts = [];
   const idxStarts = [];
   const heights = [];
+  const center = [];
   const feats = [];
   const known = [];
   for (let i = 0; i < layer.length; i++) {
@@ -325,13 +326,14 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster) {
         if (cross >= 0) idx.push(v0 + a, v0 + b, v0 + c);
         else idx.push(v0 + a, v0 + c, v0 + b);
       }
+      while (center.length / 2 < pos.length / 3) center.push(cx * unit, cz * unit);
     }
   }
   if (!starts.length) return null;
   starts.push(pos.length / 3);
   idxStarts.push(idx.length);
   return {
-    pos: new Float32Array(pos), nor: new Float32Array(nor), wall: new Float32Array(wall), meta: new Float32Array(meta),
+    pos: new Float32Array(pos), nor: new Float32Array(nor), wall: new Float32Array(wall), meta: new Float32Array(meta), center: new Float32Array(center),
     idx: new Uint32Array(idx), starts: new Uint32Array(starts), idxStarts: new Uint32Array(idxStarts), heights: new Float32Array(heights),
   };
 }

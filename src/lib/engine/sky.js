@@ -2,12 +2,12 @@ import * as THREE from 'three';
 
 export const PRESETS = {
   dusk: {
-    elevation: 5.5, azimuth: 248, sun: '#ffa868', sunPower: 3.7, envPower: 0.6, hemi: '#b09aa8', night: 0.72, stars: 0.12, sunDisc: 1,
-    zenith: '#17294f', mid: '#59608a', horizon: '#f08f58', fog: '#5d5a6c', fogDensity: 0.00036, exposure: 1.0, bloom: 0.34, clouds: '#ff9c72',
+    elevation: 5.5, azimuth: 248, sun: '#ffa868', sunPower: 3.7, envPower: 0.6, hemi: '#a59ea8', night: 0.72, stars: 0.12, sunDisc: 1,
+    zenith: '#17294f', mid: '#59608a', horizon: '#f08f58', fog: '#5d5a6c', fogDensity: 0.00036, exposure: 1.0, bloom: 0.22, clouds: '#ff9c72',
   },
   night: {
     elevation: 38, azimuth: 150, sun: '#7f9bd8', sunPower: 0.42, envPower: 0.32, night: 1, stars: 1, sunDisc: 0.12,
-    zenith: '#02050f', mid: '#071024', horizon: '#14233f', fog: '#0c1526', fogDensity: 0.00046, exposure: 1.15, bloom: 0.5, clouds: '#1b2740',
+    zenith: '#02050f', mid: '#071024', horizon: '#14233f', fog: '#0c1526', fogDensity: 0.00046, exposure: 1.15, bloom: 0.2, clouds: '#1b2740',
   },
   day: {
     elevation: 44, azimuth: 205, sun: '#fff0da', sunPower: 3.5, envPower: 0.95, night: 0, stars: 0, sunDisc: 1,

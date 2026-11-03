@@ -11,9 +11,10 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
       <div class="relative h-dvh w-full overflow-hidden">
         <app-scan-map #map [scan]="s" [time]="time()" [scanColors]="scanColors()" (nodeSelected)="active.set($event)" (ready)="loading.set(false)" (failed)="fail()" />
 
-        <div class="pointer-events-none absolute z-10 left-4 top-[68px] max-w-[300px] sm:left-6">
+        <div class="pointer-events-none absolute z-10 left-4 top-[68px] max-w-[320px] sm:left-6">
           <p class="eyebrow">{{ s.keyword }}</p>
           <h1 class="display mt-1 text-[28px] drop-shadow-[0_2px_14px_rgba(0,0,0,0.7)]">{{ s.target_name }}</h1>
+          <p class="mt-1.5 font-mono text-[10.5px] tracking-[0.04em] text-white/55 drop-shadow-[0_1px_6px_rgba(0,0,0,0.8)]">{{ s.grid_data.length }} points · {{ top3(s) }}% top 3 · avg {{ avg(s) }}</p>
           <a [href]="geogridUrl(s.id)" target="_blank" rel="noopener"
              class="pointer-events-auto mt-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-bg/80 px-3.5 py-1.5 text-[12px] font-medium text-white/80 backdrop-blur-xl transition hover:border-accent/40 hover:text-accent">
             Full scan on Geogrid <span aria-hidden="true">&#8599;</span>
@@ -63,26 +64,26 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
           </aside>
         }
 
-        <div class="absolute left-4 top-[186px] z-10 flex w-[42px] flex-col items-center rounded-xl border border-white/10 bg-[rgba(10,10,12,0.78)] py-1 backdrop-blur-2xl sm:left-6">
-          <button type="button" class="rail-btn" aria-label="Zoom in" title="Zoom in" (click)="map.zoom(0.7)">
+        <div class="absolute left-4 top-[204px] z-10 flex w-[42px] flex-col items-center rounded-xl border border-white/10 bg-[rgba(10,10,12,0.78)] py-1 backdrop-blur-2xl sm:left-6">
+          <button type="button" class="rail-btn" aria-label="Zoom in" data-tip="Zoom in" (click)="map.zoom(0.7)">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
           </button>
-          <button type="button" class="rail-btn" aria-label="Zoom out" title="Zoom out" (click)="map.zoom(1.4)">
+          <button type="button" class="rail-btn" aria-label="Zoom out" data-tip="Zoom out" (click)="map.zoom(1.4)">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 12h14" /></svg>
           </button>
           <span class="my-1 h-px w-6 bg-white/10"></span>
           @for (t of times; track t.id) {
-            <button type="button" class="rail-btn" [class.rail-on]="time() === t.id" [attr.aria-label]="t.label" [attr.aria-pressed]="time() === t.id" [title]="t.label" (click)="time.set(t.id)">
+            <button type="button" class="rail-btn" [class.rail-on]="time() === t.id" [attr.aria-label]="t.label" [attr.aria-pressed]="time() === t.id" [attr.data-tip]="t.label" (click)="time.set(t.id)">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path [attr.d]="t.icon" /></svg>
             </button>
           }
           <span class="my-1 h-px w-6 bg-white/10"></span>
-          <button type="button" class="rail-btn" [class.rail-on]="scanColors()" [attr.aria-pressed]="scanColors()" aria-label="Building colors" [title]="scanColors() ? 'Building colors: on' : 'Building colors: off'" (click)="scanColors.set(!scanColors())">
+          <button type="button" class="rail-btn" [class.rail-on]="scanColors()" [attr.aria-pressed]="scanColors()" aria-label="Building colors" [attr.data-tip]="scanColors() ? 'Building colors: on' : 'Building colors: off'" (click)="scanColors.set(!scanColors())">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V9l6-4v16M10 21V3l10 5v13M2 21h20M14 11h2M14 15h2" /></svg>
           </button>
         </div>
 
-        <app-rank-legend class="pointer-events-none absolute z-10 bottom-3 left-1/2 hidden -translate-x-1/2 rounded-full border border-white/10 bg-bg/80 px-4 py-2 backdrop-blur-xl sm:flex" />
+        <app-rank-legend class="pointer-events-none absolute z-10 bottom-4 left-4 hidden rounded-xl border border-white/10 bg-[rgba(10,10,12,0.78)] px-3.5 py-3 backdrop-blur-2xl sm:left-6 sm:block" />
 
         @if (error()) {
           <div class="absolute inset-0 grid place-items-center bg-bg/80"><p class="eyebrow text-red-300/80">Buildings could not be loaded</p></div>
@@ -112,6 +113,16 @@ export class ScanView {
 
   geogridUrl(id: string) {
     return 'https://geogrid.dev/dashboard/scans/' + id;
+  }
+
+  top3(s: any) {
+    const ranks = s.grid_data.filter((n: any) => n.rank != null);
+    return ranks.length ? Math.round((ranks.filter((n: any) => n.rank <= 3).length / ranks.length) * 100) : 0;
+  }
+
+  avg(s: any) {
+    const ranks = s.grid_data.map((n: any) => n.rank).filter((r: any) => r != null && r <= 20);
+    return ranks.length ? '#' + (ranks.reduce((a: number, b: number) => a + b, 0) / ranks.length).toFixed(1) : '-';
   }
 
   mapsUrl(a: any) {

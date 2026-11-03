@@ -8,6 +8,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createField, createProjection } from './engine/field.js';
 import { rgbHex } from './rank-colors.js';
+import { addLandmarks } from './engine/landmarks.js';
 import { createMaterials } from './engine/materials.js';
 import { PRESETS, createSky, sunDirection } from './engine/sky.js';
 
@@ -64,6 +65,7 @@ export function createScanMap(container, scan, options) {
   camera.position.set(-300, 5200, 4200);
 
   const mats = createMaterials(field);
+  const lightLandmarks = addLandmarks(scene, proj);
   const sky = createSky();
   sky.mesh.renderOrder = -200;
   scene.add(sky.mesh);
@@ -92,10 +94,10 @@ export function createScanMap(container, scan, options) {
     new ShaderPass({
       uniforms: { tDiffuse: { value: null } },
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-      fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); if (isnan(c.r) || isnan(c.g) || isnan(c.b) || isinf(c.r) || isinf(c.g) || isinf(c.b)) c = vec4(0.0, 0.0, 0.0, 1.0); gl_FragColor = vec4(min(c.rgb, vec3(10.0)), 1.0); }',
+      fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); if (isnan(c.r) || isnan(c.g) || isnan(c.b) || isinf(c.r) || isinf(c.g) || isinf(c.b)) c = vec4(0.0, 0.0, 0.0, 1.0); gl_FragColor = vec4(min(c.rgb, vec3(2.2)), 1.0); }',
     }),
   );
-  const bloom = new UnrealBloomPass(new THREE.Vector2(container.clientWidth / 2, container.clientHeight / 2), 0.34, 0.55, 0.92);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(container.clientWidth / 2, container.clientHeight / 2), 0.22, 0.45, 1.0);
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
 
@@ -129,6 +131,7 @@ export function createScanMap(container, scan, options) {
     hemi.groundColor.set(p.fog);
     hemi.intensity = p.envPower * 2.6;
     bloom.strength = p.bloom;
+    lightLandmarks(p.night);
     fogBase = p.fogDensity;
     const envScene = new THREE.Scene();
     envScene.add(new THREE.Mesh(sky.mesh.geometry, sky.mesh.material));
@@ -217,14 +220,16 @@ export function createScanMap(container, scan, options) {
   }
 
   const look = new THREE.Vector3();
+  const focusTo = new THREE.Vector2();
+  const focusRadius = (dist) => THREE.MathUtils.clamp(dist * 2.2, 3000, 4400);
   function refreshTiles() {
     if (!template) return;
     const t = controls.target;
     const dist = camera.position.distanceTo(t);
-    const R = THREE.MathUtils.clamp(dist * 1.6, 1300, 4400);
+    const R = focusRadius(dist);
     camera.getWorldDirection(look);
     const size = proj.tileMeters(NEAR_ZOOM);
-    const [cx, cy] = proj.tileAt(t.x + look.x * R * 0.3, t.z + look.z * R * 0.3, NEAR_ZOOM);
+    const [cx, cy] = proj.tileAt(t.x, t.z, NEAR_ZOOM);
     const span = Math.ceil(R / size) + 1;
     const wantedNear = new Set();
     if (dist < 9500) {
@@ -234,7 +239,7 @@ export function createScanMap(container, scan, options) {
           const mx = ox + size / 2;
           const mz = oz + size / 2;
           const d = Math.hypot(mx - t.x, mz - t.z);
-          if (d > R + size) continue;
+          if (d > R + size * 0.75) continue;
           const key = NEAR_ZOOM + '/' + x + '/' + y;
           wantedNear.add(key);
           const toX = mx - camera.position.x;
@@ -315,6 +320,7 @@ export function createScanMap(container, scan, options) {
       g.setAttribute('normal', new THREE.BufferAttribute(b.nor, 3));
       g.setAttribute('aWall', new THREE.BufferAttribute(b.wall, 2));
       g.setAttribute('aMeta', new THREE.BufferAttribute(b.meta, 4));
+      g.setAttribute('aCenter', new THREE.BufferAttribute(b.center, 2));
       g.setIndex(new THREE.BufferAttribute(b.idx, 1));
       g.computeBoundingSphere();
       const mesh = new THREE.Mesh(g, mats.building);
@@ -682,6 +688,8 @@ export function createScanMap(container, scan, options) {
     }
     land.position.set(camera.position.x, 0, camera.position.z);
     scene.fog.density = fogBase / Math.max(1, dist / 1500);
+    mats.uniforms.uFocus.value.lerp(focusTo.set(controls.target.x, controls.target.z), 0.04);
+    mats.uniforms.uFocusR.value += (focusRadius(dist) - mats.uniforms.uFocusR.value) * 0.04;
 
     if (now > refreshAt) {
       refreshAt = now + 0.4;
