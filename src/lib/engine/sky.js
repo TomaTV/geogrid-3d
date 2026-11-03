@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 
 export const PRESETS = {
+  standard: {
+    elevation: 42, azimuth: 215, sun: '#c7d2ee', sunPower: 1.15, envPower: 0.5, night: 0.55, stars: 0.2, sunDisc: 0, hemi: '#6f7a90',
+    zenith: '#070b14', mid: '#0e1522', horizon: '#18202f', fog: '#10151f', fogDensity: 0.00036, exposure: 1, bloom: 0.14, clouds: '#1a2232',
+  },
   dusk: {
     elevation: 5.5, azimuth: 248, sun: '#ffa868', sunPower: 3.7, envPower: 0.6, hemi: '#a59ea8', night: 0.72, stars: 0.12, sunDisc: 1,
     zenith: '#17294f', mid: '#59608a', horizon: '#f08f58', fog: '#5d5a6c', fogDensity: 0.00036, exposure: 1.0, bloom: 0.22, clouds: '#ff9c72',
@@ -14,6 +18,23 @@ export const PRESETS = {
     zenith: '#2a66b8', mid: '#6ea4dc', horizon: '#d6e6f3', fog: '#bfd2e2', fogDensity: 0.00034, exposure: 0.92, bloom: 0.12, clouds: '#ffffff',
   },
 };
+
+export function livePreset(lng, lat, date = new Date()) {
+  const r = Math.PI / 180;
+  const d = date.getTime() / 86400000 + 2440587.5 - 2451545;
+  const g = (357.528 + 0.9856003 * d) * r;
+  const l = (280.46 + 0.9856474 * d + 1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)) * r;
+  const eps = (23.439 - 4e-7 * d) * r;
+  const ra = Math.atan2(Math.cos(eps) * Math.sin(l), Math.cos(l));
+  const dec = Math.asin(Math.sin(eps) * Math.sin(l));
+  const h = (18.697374558 + 24.06570982441908 * d) * 15 * r + lng * r - ra;
+  const phi = lat * r;
+  const elevation = Math.asin(Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.cos(h)) / r;
+  const azimuth = (Math.atan2(-Math.sin(h), Math.tan(dec) * Math.cos(phi) - Math.sin(phi) * Math.cos(h)) / r + 360) % 360;
+  if (elevation > 10) return { ...PRESETS.day, elevation, azimuth };
+  if (elevation > -5) return { ...PRESETS.dusk, elevation: Math.max(elevation, 3), azimuth };
+  return PRESETS.night;
+}
 
 export function sunDirection(p) {
   const e = (p.elevation * Math.PI) / 180;
@@ -53,7 +74,7 @@ export function createSky() {
       varying vec3 vDir;
       uniform vec3 uSun, uZenith, uMid, uHorizon, uFog, uSunColor, uCloud;
       uniform float uStars, uDisc, uClock;
-      float h21(vec2 p) { p = fract(p * vec2(233.34, 851.73)); p += dot(p, p + 23.45); return fract(p.x * p.y); }
+      float h21(vec2 p) { return fract(sin(dot(mod(p, 289.0), vec2(127.1, 311.7))) * 43758.5453); }
       float vn(vec2 p) {
         vec2 i = floor(p); vec2 f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
         return mix(mix(h21(i), h21(i + vec2(1, 0)), u.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), u.x), u.y);
@@ -77,7 +98,7 @@ export function createSky() {
         c += uSunColor * smoothstep(0.99925, 0.99965, toSun) * 26.0 * uDisc;
 
         if (d.y > 0.015) {
-          vec2 sp = d.xz / (d.y + 0.16) * 1.15;
+          vec2 sp = d.xz / (d.y + 0.28) * 1.6;
           float n = fbm(sp + vec2(uClock * 0.006, uClock * 0.002));
           float cover = smoothstep(0.5, 0.78, n) * smoothstep(0.015, 0.14, d.y);
           float lit = 0.5 + 0.7 * pow(toSun, 3.0) + 0.4 * n;

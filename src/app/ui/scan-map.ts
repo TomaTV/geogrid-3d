@@ -15,7 +15,7 @@ export class ScanMap implements OnDestroy {
   failed = output<unknown>();
 
   private host = viewChild.required<ElementRef<HTMLDivElement>>('host');
-  private instance: { destroy: () => void; setTime: (name: string) => void; zoom: (factor: number) => void; setScanColors: (on: boolean) => void } | null = null;
+  private instance: any = null;
 
   constructor() {
     effect(() => {
@@ -38,8 +38,8 @@ export class ScanMap implements OnDestroy {
     });
   }
 
-  zoom(factor: number) {
-    this.instance?.zoom(factor);
+  engine() {
+    return this.instance;
   }
 
   ngOnDestroy() {

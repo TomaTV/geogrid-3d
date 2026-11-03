@@ -221,6 +221,7 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster) {
       const cz = outer.reduce((s, p) => s + p[1], 0) / outer.length;
       const wx = ox + cx * unit;
       const wz = oz + cz * unit;
+      if (job.exclude.some(([ex, ez, er]) => Math.hypot(wx - ex, wz - ez) < er)) continue;
       const delay = job.radial ? Math.hypot(wx, wz) * 0.00032 + r0 * 0.45 : r0 * 0.7;
       const seed = hash(Math.round(h * 10), Math.round(base * 10));
 

@@ -19,10 +19,7 @@ function frustum(out, a, ra, ya, b, rb, yb) {
 function eiffel() {
   const pos = [];
   const sections = [
-    [0, 62, 13],
-    [57, 40, 10],
-    [115, 19, 7],
-    [190, 6.5, 3.6],
+    [0, 62, 13], [28, 50, 11.5], [57, 39, 10], [85, 28, 8.5], [115, 19, 7], [150, 11.5, 5], [190, 6.8, 3.6],
   ];
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
@@ -33,8 +30,9 @@ function eiffel() {
       }
     }
   }
-  frustum(pos, [0, 0], 10, 190, [0, 0], 4.2, 276);
-  frustum(pos, [0, 0], 4.2, 276, [0, 0], 1.2, 312);
+  frustum(pos, [0, 0], 10, 190, [0, 0], 6.5, 230);
+  frustum(pos, [0, 0], 6.5, 230, [0, 0], 4, 276);
+  frustum(pos, [0, 0], 4, 276, [0, 0], 1.2, 312);
   frustum(pos, [0, 0], 0.7, 312, [0, 0], 0.2, 330);
   frustum(pos, [0, 0], 56, 57, [0, 0], 56, 64);
   frustum(pos, [0, 0], 33, 115, [0, 0], 33, 120);
@@ -55,7 +53,23 @@ function pyramid() {
 }
 
 export function addLandmarks(scene, proj) {
-  const iron = new THREE.MeshLambertMaterial({ color: 0x5b4a35, emissive: new THREE.Color(1, 0.62, 0.22), emissiveIntensity: 0 });
+  const iron = new THREE.MeshLambertMaterial({ color: 0x4a3c2c, emissive: new THREE.Color(1, 0.6, 0.2), emissiveIntensity: 0, side: THREE.DoubleSide });
+  iron.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vLocal;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLocal = position;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vLocal;')
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        float side = vLocal.x + vLocal.z;
+        float a = abs(fract((vLocal.y + side) / 9.0) - 0.5);
+        float b = abs(fract((vLocal.y - side) / 9.0) - 0.5);
+        float rail = abs(fract(vLocal.y / 19.0) - 0.5);
+        if (min(min(a, b), rail) > 0.16 && vLocal.y < 300.0) discard;`,
+      );
+  };
   const glass = new THREE.MeshStandardMaterial({ color: 0x9fc4d8, roughness: 0.08, metalness: 0.6, emissive: new THREE.Color(1, 0.86, 0.6), emissiveIntensity: 0 });
   const place = (geometry, material, lng, lat) => {
     const m = new THREE.Mesh(geometry, material);
@@ -67,7 +81,7 @@ export function addLandmarks(scene, proj) {
   place(eiffel(), iron, 2.2945, 48.85826);
   place(pyramid(), glass, 2.33585, 48.86103);
   return (night) => {
-    iron.emissiveIntensity = night * 1.5;
-    glass.emissiveIntensity = night * 0.9;
+    iron.emissiveIntensity = night * 0.32;
+    glass.emissiveIntensity = night * 0.35;
   };
 }

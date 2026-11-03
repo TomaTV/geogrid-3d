@@ -8,7 +8,7 @@ import { filter, map } from 'rxjs';
   imports: [RouterOutlet, RouterLink, RouterLinkActive],
   template: `
     <a routerLink="/" class="fixed left-4 top-4 z-40 flex h-[44px] items-center px-1 sm:left-6">
-      <img src="geogrid3d.svg" alt="Geogrid 3D" class="h-[30px] w-auto drop-shadow-[0_1px_8px_rgba(0,0,0,0.8)]" />
+      <img src="logo.svg" alt="" class="h-[20px] w-auto" /><span class="ml-2 text-[15px] font-semibold tracking-tight">Geogrid</span><span class="ml-1.5 font-mono text-[9.5px] uppercase tracking-[0.14em] text-accent">3D</span>
     </a>
 
     <button class="fixed right-4 top-4 z-50 grid h-[40px] w-[40px] place-items-center rounded-xl border border-white/[0.12] bg-[rgba(10,10,12,0.72)] text-white/80 backdrop-blur-2xl transition hover:border-white/25 hover:text-white sm:right-6"

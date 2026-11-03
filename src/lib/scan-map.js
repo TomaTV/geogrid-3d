@@ -10,11 +10,11 @@ import { createField, createProjection } from './engine/field.js';
 import { rgbHex } from './rank-colors.js';
 import { addLandmarks } from './engine/landmarks.js';
 import { createMaterials } from './engine/materials.js';
-import { PRESETS, createSky, sunDirection } from './engine/sky.js';
+import { PRESETS, createSky, livePreset, sunDirection } from './engine/sky.js';
 
 const TILES_URL = 'https://tiles.openfreemap.org/planet';
 const WORKERS = 2;
-const MAX_NEAR = 48;
+const MAX_NEAR = 36;
 const FAR_ZOOM = 11;
 const NEAR_ZOOM = 14;
 
@@ -48,8 +48,8 @@ export function createScanMap(container, scan, options) {
   const businessXZ = selfNode ? proj.toWorld(selfNode.lng, selfNode.lat) : null;
   const hq = /[?&]hq\b/.test(location.search);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  let dpr = Math.min(window.devicePixelRatio || 1, 1.25);
+  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+  let dpr = Math.min(window.devicePixelRatio || 1, 1);
   renderer.setPixelRatio(dpr);
   renderer.setSize(container.clientWidth, container.clientHeight);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -110,7 +110,7 @@ export function createScanMap(container, scan, options) {
   controls.maxPolarAngle = THREE.MathUtils.degToRad(86);
   controls.minDistance = 35;
   controls.maxDistance = 16000;
-  controls.zoomToCursor = true;
+  controls.enableZoom = false;
   controls.target.set(0, 0, 0);
 
   let shadowDirty = true;
@@ -175,6 +175,7 @@ export function createScanMap(container, scan, options) {
       worker.instance.postMessage({
         id: job.id, template, z: job.z, x: job.x, y: job.y, k: proj.k, mx0: proj.mx0, my0: proj.my0,
         radial: introStart < 0 || now - introStart < 5,
+        exclude,
       });
       return;
     }
@@ -219,9 +220,13 @@ export function createScanMap(container, scan, options) {
     queue.push({ id: nextId++, key, z, x, y, priority, wanted });
   }
 
+  const freeAfterUpload = function () {
+    this.array = null;
+  };
+  const exclude = [[...proj.toWorld(2.2945, 48.85826), 135]];
   const look = new THREE.Vector3();
   const focusTo = new THREE.Vector2();
-  const focusRadius = (dist) => THREE.MathUtils.clamp(dist * 2.2, 3000, 4400);
+  const focusRadius = (dist) => THREE.MathUtils.clamp(dist * 2.2, 2600, 3700);
   function refreshTiles() {
     if (!template) return;
     const t = controls.target;
@@ -292,6 +297,7 @@ export function createScanMap(container, scan, options) {
     if (part.road) g.setAttribute('aRoad', new THREE.BufferAttribute(part.road, 3));
     g.setIndex(new THREE.BufferAttribute(part.idx, 1));
     g.computeBoundingSphere();
+    for (const a of [...Object.values(g.attributes), g.index]) a.onUpload(freeAfterUpload);
     const m = new THREE.Mesh(g, material);
     m.position.set(origin[0], 0, origin[1]);
     m.renderOrder = order;
@@ -323,6 +329,7 @@ export function createScanMap(container, scan, options) {
       g.setAttribute('aCenter', new THREE.BufferAttribute(b.center, 2));
       g.setIndex(new THREE.BufferAttribute(b.idx, 1));
       g.computeBoundingSphere();
+      for (const name of ['aWall', 'aMeta', 'aCenter']) g.attributes[name].onUpload(freeAfterUpload);
       const mesh = new THREE.Mesh(g, mats.building);
       mesh.customDepthMaterial = mats.buildingDepth;
       mesh.position.set(result.origin[0], 0, result.origin[1]);
@@ -332,7 +339,7 @@ export function createScanMap(container, scan, options) {
       mesh.updateMatrix();
       add(mesh);
       entry.buildingMesh = mesh;
-      entry.data = b;
+      entry.data = { pos: b.pos, idx: b.idx, starts: b.starts, idxStarts: b.idxStarts, heights: b.heights };
       growUntil = Math.max(growUntil, now + 3.2);
     }
     if (result.trees) {
@@ -340,6 +347,8 @@ export function createScanMap(container, scan, options) {
       for (let i = 1; i < t.tree.length; i += 2) t.tree[i] += now;
       const inst = new THREE.InstancedBufferAttribute(t.inst, 4);
       const attr = new THREE.InstancedBufferAttribute(t.tree, 2);
+      inst.onUpload(freeAfterUpload);
+      attr.onUpload(freeAfterUpload);
       const sphere = new THREE.Sphere(new THREE.Vector3(result.size / 2, 10, result.size / 2), result.size * 0.75);
       const make = (src) => {
         const g = new THREE.InstancedBufferGeometry();
@@ -396,7 +405,9 @@ export function createScanMap(container, scan, options) {
     el.style.left = '0';
     el.style.top = '0';
     overlay.appendChild(el);
-    labels.push({ el, pos: new THREE.Vector3(x, y, z) });
+    const item = { el, pos: new THREE.Vector3(x, y, z), hidden: false };
+    labels.push(item);
+    return item;
   }
 
   const ring = new THREE.Mesh(
@@ -426,11 +437,14 @@ export function createScanMap(container, scan, options) {
     label('scan-business', '<span>' + escapeHtml(scan.target_name) + '</span><i></i>', businessXZ[0], 46, businessXZ[1]);
   }
 
+  let zoomPending = 0;
+  let zoomCursor = null;
+  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const groundHit = new THREE.Vector3();
   const zoomBy = (factor) => {
-    const offset = camera.position.clone().sub(controls.target).multiplyScalar(factor);
-    if (offset.length() < controls.minDistance || offset.length() > controls.maxDistance) return;
     endIntro();
-    camera.position.copy(controls.target).add(offset);
+    zoomCursor = null;
+    zoomPending += Math.log(factor);
   };
 
   const credit = document.createElement('div');
@@ -446,22 +460,34 @@ export function createScanMap(container, scan, options) {
   highlight.visible = false;
   highlight.matrixAutoUpdate = false;
   scene.add(highlight);
-  const arc = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.25, 1, 0.65), fog: false, transparent: true, opacity: 0.9, depthWrite: false }));
-  const nodeArc = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.8, 0.8, 0.8), fog: false, transparent: true, opacity: 0.55, depthWrite: false }));
+  const arc = new THREE.Mesh(
+    new THREE.BufferGeometry(),
+    new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      uniforms: { uT: mats.uniforms.uTime, uSpan: { value: 1 } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'varying vec2 vUv; uniform float uT; uniform float uSpan; void main(){ float dash = smoothstep(0.35, 0.5, fract(vUv.x * uSpan / 34.0 - uT * 0.7)); float ends = smoothstep(0.0, 0.03, vUv.x) * smoothstep(1.0, 0.97, vUv.x); gl_FragColor = vec4(vec3(0.55, 1.0, 0.8), (0.28 + 0.62 * dash) * ends); }',
+    }),
+  );
   arc.visible = false;
-  nodeArc.visible = false;
   arc.frustumCulled = false;
-  nodeArc.frustumCulled = false;
-  scene.add(arc, nodeArc);
+  scene.add(arc);
+  const distanceChip = label('scan-distance', '<span></span>', 0, 0, 0);
+  distanceChip.hidden = true;
 
-  function setArc(mesh, from, to) {
+  function setArc(from, to) {
     const span = from.distanceTo(to);
     const mid = from.clone().add(to).multiplyScalar(0.5);
-    mid.y = Math.max(from.y, to.y) + Math.min(span * 0.14, 180);
+    mid.y = Math.max(from.y, to.y) + Math.min(span * 0.2, 420);
     const curve = new THREE.QuadraticBezierCurve3(from, mid, to);
-    mesh.geometry.dispose();
-    mesh.geometry = new THREE.TubeGeometry(curve, 48, Math.max(0.5, camera.position.distanceTo(controls.target) * 0.0005), 6, false);
-    mesh.visible = true;
+    arc.geometry.dispose();
+    arc.geometry = new THREE.TubeGeometry(curve, 64, Math.max(0.6, camera.position.distanceTo(controls.target) * 0.0009), 6, false);
+    arc.material.uniforms.uSpan.value = span;
+    arc.visible = true;
+    distanceChip.pos.copy(curve.getPoint(0.5));
+    distanceChip.el.firstChild.textContent = span >= 1000 ? (span / 1000).toFixed(1) + ' km' : Math.round(span) + ' m';
+    distanceChip.hidden = false;
   }
 
   const raycaster = new THREE.Raycaster();
@@ -531,15 +557,12 @@ export function createScanMap(container, scan, options) {
   }
 
   function showLinks(info) {
-    if (!info) {
+    if (!info || !businessXZ) {
       arc.visible = false;
-      nodeArc.visible = false;
+      distanceChip.hidden = true;
       return;
     }
-    const from = info.hit.point.clone();
-    if (businessXZ) setArc(arc, from, new THREE.Vector3(businessXZ[0], 4, businessXZ[1]));
-    const p = field.pts[info.index];
-    setArc(nodeArc, from, new THREE.Vector3(p[0], 2, p[1]));
+    setArc(info.hit.point.clone(), new THREE.Vector3(businessXZ[0], 4, businessXZ[1]));
   }
 
   let dragging = false;
@@ -561,7 +584,13 @@ export function createScanMap(container, scan, options) {
     }
     downAt = null;
   };
-  const onWheel = () => endIntro();
+  const onWheel = (e) => {
+    e.preventDefault();
+    endIntro();
+    const unit = e.deltaMode === 1 ? 30 : 1;
+    zoomPending += e.deltaY * unit * (e.ctrlKey ? 0.012 : 0.0016);
+    zoomCursor = [e.clientX, e.clientY];
+  };
   const keys = new Set();
   const onKey = (e) => {
     if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
@@ -574,7 +603,7 @@ export function createScanMap(container, scan, options) {
   };
   el.addEventListener('pointerdown', onDown);
   el.addEventListener('pointerup', onUp);
-  el.addEventListener('wheel', onWheel, { passive: true });
+  el.addEventListener('wheel', onWheel, { passive: false });
   window.addEventListener('keydown', onKey);
   window.addEventListener('keyup', onKey);
 
@@ -626,12 +655,16 @@ export function createScanMap(container, scan, options) {
   }
 
   let raf = 0;
+  let fly = null;
+  let liveTimer = null;
+  const origin = new THREE.Vector3();
   let refreshAt = 0;
   let frames = 0;
   let fpsAt = 0;
   let last = 0;
   let renderedAt = 0;
   let quality = 0;
+  let lockQuality = false;
   const v = new THREE.Vector3();
   const side = new THREE.Vector3();
   const move = new THREE.Vector3();
@@ -677,7 +710,31 @@ export function createScanMap(container, scan, options) {
       controls.target.add(move);
     }
 
-    const changed = controls.update();
+    let changed = controls.update();
+    if (Math.abs(zoomPending) > 1e-4) {
+      const step = zoomPending * 0.2;
+      zoomPending -= step;
+      const offset = v.copy(camera.position).sub(controls.target);
+      const d0 = offset.length();
+      const d1 = THREE.MathUtils.clamp(d0 * Math.exp(step), controls.minDistance, controls.maxDistance);
+      const f = d1 / d0;
+      if (zoomCursor) {
+        const rect = el.getBoundingClientRect();
+        ndc.set(((zoomCursor[0] - rect.left) / rect.width) * 2 - 1, -((zoomCursor[1] - rect.top) / rect.height) * 2 + 1);
+        raycaster.setFromCamera(ndc, camera);
+        if (raycaster.ray.intersectPlane(groundPlane, groundHit) && groundHit.distanceTo(controls.target) < d0 * 4) controls.target.lerp(groundHit, 1 - f);
+      }
+      camera.position.copy(controls.target).add(offset.multiplyScalar(f));
+      changed = true;
+    }
+    if (fly) {
+      const t = Math.min((now - fly.at) / 1.4, 1);
+      const e = 1 - Math.pow(1 - t, 3);
+      camera.position.lerpVectors(fly.pos, endPos, e);
+      controls.target.lerpVectors(fly.target, origin, e);
+      changed = true;
+      if (t >= 1) fly = null;
+    }
     controls.target.y = 0;
 
     const dist = camera.position.distanceTo(controls.target);
@@ -697,7 +754,7 @@ export function createScanMap(container, scan, options) {
     }
 
     const busy = changed || uploads.length > 0 || now < growUntil || !introDone || keys.size > 0;
-    if (!busy && now - renderedAt < 0.05) {
+    if (!busy && now - renderedAt < 0.066) {
       frames = 0;
       fpsAt = now;
       return;
@@ -709,7 +766,7 @@ export function createScanMap(container, scan, options) {
 
     for (const l of labels) {
       v.copy(l.pos).project(camera);
-      const visible = v.z < 1 && v.z > -1;
+      const visible = !l.hidden && v.z < 1 && v.z > -1;
       l.el.style.display = visible ? '' : 'none';
       if (visible) {
         const sx = ((v.x + 1) / 2) * container.clientWidth;
@@ -723,7 +780,7 @@ export function createScanMap(container, scan, options) {
       const fps = frames / (now - fpsAt);
       frames = 0;
       fpsAt = now;
-      if (!hq && firstReady && fps < 28 && quality < 4) {
+      if (!hq && !lockQuality && firstReady && fps < 28 && quality < 4) {
         quality++;
         if (quality === 1 || quality === 3) {
           dpr = quality === 1 ? 1 : 0.8;
@@ -755,10 +812,35 @@ export function createScanMap(container, scan, options) {
       mats.uniforms.uScan.value = on ? 1 : 0;
     },
     setTime(name) {
-      if (PRESETS[name]) applyPreset(PRESETS[name]);
+      clearInterval(liveTimer);
+      liveTimer = null;
+      if (name === 'live') {
+        const tick = () => applyPreset(livePreset(center[0], center[1]));
+        tick();
+        liveTimer = setInterval(tick, 60000);
+      } else if (PRESETS[name]) {
+        applyPreset(PRESETS[name]);
+      }
+    },
+    recenter() {
+      endIntro();
+      zoomPending = 0;
+      fly = { at: now, pos: camera.position.clone(), target: controls.target.clone() };
+    },
+    setShadows(on) {
+      sun.castShadow = on;
+      shadowDirty = true;
+    },
+    setLowPower(on) {
+      quality = on ? 4 : 0;
+      lockQuality = on;
+      dpr = on ? 0.8 : Math.min(window.devicePixelRatio || 1, 1);
+      renderer.setPixelRatio(dpr);
+      composer.setPixelRatio(dpr);
     },
     destroy() {
       destroyed = true;
+      clearInterval(liveTimer);
       cancelAnimationFrame(raf);
       resize.disconnect();
       el.removeEventListener('pointerdown', onDown);
