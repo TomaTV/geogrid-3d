@@ -21,6 +21,7 @@ npm run dev     # ng serve :4200, json-server :3001, proxy de clé :3002
   - `buildings.js` : télécharge et décode les tuiles vectorielles OpenFreeMap (zoom 14) : bâtiments, parcs, forêts.
   - `building-ranks.js` : estimation du rang par immeuble (noyau gaussien sur les nœuds mesurés, couleur mélangée dans l'espace des couleurs Geogrid), fondu vers le gris neutre loin des mesures.
   - `deck-layers.js` : rendu deck.gl (`MapboxOverlay` non entrelacé) : bâtiments extrudés (`GeoJsonLayer`) avec lumière ambiante et soleil directionnel, arbres en maillages (`SimpleMeshLayer`, sphères sur troncs). MapLibre ne garde que le fond (sol, routes, eau), le ciel, la caméra et les repères.
+  - `heat-field.js` : image PNG du champ de rang interpolé (même estimateur que les immeubles), posée au sol dans MapLibre comme couche raster sous les routes. Donne le dégradé continu façon heatmap de Geogrid.
   - `trees.js` : positions d'arbres tirées au hasard dans les parcs et forêts (pas des vrais arbres).
   - `map-style.js` : style sombre, ciel crépusculaire, couches par tuile.
   - `rank-colors.js` : palette exacte de Geogrid (`scan-utils.js` côté produit). Hors top 20 = gris `#555555`, pas rouge.
