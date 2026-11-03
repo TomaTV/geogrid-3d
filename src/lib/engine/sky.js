@@ -71,6 +71,7 @@ export function createSky() {
         vec3 horizon = mix(uFog, uHorizon, side);
         vec3 c = mix(horizon, uMid, smoothstep(0.0, 0.2, h));
         c = mix(c, uZenith, smoothstep(0.12, 0.72, h));
+        c = mix(uFog, c, smoothstep(0.0, 0.08, h));
         c += uSunColor * pow(toSun, 9.0) * 0.32 * uDisc;
         c += uSunColor * pow(toSun, 90.0) * 0.8 * uDisc;
         c += uSunColor * smoothstep(0.99925, 0.99965, toSun) * 26.0 * uDisc;
