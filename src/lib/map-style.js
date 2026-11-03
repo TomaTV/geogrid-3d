@@ -4,13 +4,13 @@ export function buildStyle() {
   return {
     version: 8,
     name: 'geogrid-3d-dusk',
-    light: { anchor: 'map', color: '#f4f7ff', intensity: 0.6, position: [1.25, 235, 50] },
+    light: { anchor: 'map', color: '#ffe9cf', intensity: 0.62, position: [1.2, 215, 46] },
     sky: {
-      'sky-color': '#24456f',
-      'horizon-color': '#9fb4cf',
-      'fog-color': '#33465f',
-      'fog-ground-blend': 0.75,
-      'horizon-fog-blend': 0.85,
+      'sky-color': '#1a3558',
+      'horizon-color': '#e0a276',
+      'fog-color': '#2c3d58',
+      'fog-ground-blend': 0.85,
+      'horizon-fog-blend': 0.9,
       'sky-horizon-blend': 0.75,
       'atmosphere-blend': 0.9,
     },
@@ -59,10 +59,19 @@ export function buildStyle() {
 export const IDS = {
   ring: 'scan-ring',
   nodes: 'scan-nodes',
+  link: 'scan-link',
 };
+
+export const SUN_AZIMUTH = 215;
 
 export function overlayLayers() {
   return [
+    {
+      id: IDS.link,
+      type: 'line',
+      source: IDS.link,
+      paint: { 'line-color': '#ffffff', 'line-width': 1.5, 'line-dasharray': [2, 2] },
+    },
     {
       id: IDS.ring,
       type: 'circle',

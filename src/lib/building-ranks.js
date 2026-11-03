@@ -53,21 +53,24 @@ export function makeEstimator(nodes, step) {
   return function estimate(lat, lng) {
     const [px, py] = project(lat, lng, lat0);
     let nearest = [Infinity, 0];
+    let measured = [Infinity, -1];
     let w = 0;
     let rank = 0;
     const acc = [0, 0, 0];
     for (let i = 0; i < pts.length; i++) {
       const d = Math.hypot(pts[i][0] - px, pts[i][1] - py);
       if (d < nearest[0]) nearest = [d, i];
+      if (nodes[i].rank != null && d < measured[0]) measured = [d, i];
       if (nodes[i].rank == null || d > sigma * 3.2) continue;
       const wi = Math.exp(-((d / sigma) ** 2));
       w += wi;
       rank += wi * Math.min(nodes[i].rank, RANK_CAP);
       nodeRgb(nodes[i].rank).forEach((v, k) => (acc[k] += wi * v));
     }
-    if (w < 1e-4) return { node: nearest[1], dist: nearest[0], rank: null, rgb: null, conf: 0 };
+    const ref = measured[1] >= 0 ? measured : nearest;
+    if (w < 1e-4) return { node: ref[1], dist: ref[0], rank: null, rgb: null, conf: 0 };
     const x = Math.min(1, w / 0.7);
-    return { node: nearest[1], dist: nearest[0], rank: rank / w, rgb: acc.map((v) => v / w), conf: x * x * (3 - 2 * x) };
+    return { node: ref[1], dist: ref[0], rank: rank / w, rgb: acc.map((v) => v / w), conf: x * x * (3 - 2 * x) };
   };
 }
 
@@ -94,6 +97,8 @@ export function rankBuildings(features, estimate) {
         height: props.render_height ?? 8,
         base: props.render_min_height ?? 0,
         node: e.node,
+        clat: lat,
+        clng: lng,
         dist: Math.round(e.dist),
         est: e.rank == null || t < 0.5 ? -1 : Math.round(e.rank * 10) / 10,
         color: rgbHex(rgb),

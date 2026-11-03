@@ -1,5 +1,5 @@
 import * as maplibregl from 'maplibre-gl';
-import { buildStyle, overlayLayers, tileLayers, IDS } from './map-style.js';
+import { buildStyle, overlayLayers, tileLayers, IDS, SUN_AZIMUTH } from './map-style.js';
 import { gridStep, makeEstimator, rankBuildings, scanBounds } from './building-ranks.js';
 import { loadTile, tileAt, tileDistance, tileKey } from './buildings.js';
 import { growTrees } from './trees.js';
@@ -9,10 +9,10 @@ maplibregl.setWorkerUrl(new URL('maplibre/maplibre-gl-worker.mjs', document.base
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const MAX_TILES = 56;
-const MAX_VIEW_METERS = 12000;
+const MAX_VIEW_METERS = 7500;
 const MIN_BUILDING_ZOOM = 12.6;
 const NEAR = 2500;
-const MID = 5000;
+const FAR = 7000;
 
 function pin(className, html) {
   const el = document.createElement('div');
@@ -88,12 +88,13 @@ export function createScanMap(container, scan, { onNodeSelect, onReady, onError 
 
   function bucketFor(distance) {
     const k = map.getZoom() >= 15.5 ? 2 : 1;
-    return distance > MID * k ? 2 : distance > NEAR * k ? 1 : 0;
+    return distance > FAR * k ? 2 : distance > NEAR * k ? 1 : 0;
   }
 
   function build(data, bucket) {
     const { west, east, north, south } = data.bbox;
-    const minHeight = [0, 8, 20][bucket];
+    if (bucket === 2) return { buildings: { type: 'FeatureCollection', features: [] }, trees: { type: 'FeatureCollection', features: [] } };
+    const minHeight = [0, 6][bucket];
     const own = data.buildings.filter((f) => {
       const [lng, lat] = ringCenter(f.geometry);
       return lng >= west && lng < east && lat <= north && lat > south && (f.properties.render_height ?? 8) >= minHeight;
@@ -169,7 +170,7 @@ export function createScanMap(container, scan, { onNodeSelect, onReady, onError 
           if (!firstReady) {
             firstReady = true;
             onReady?.({ tiles: tiles.size });
-            map.easeTo({ pitch: 70, bearing: -28, zoom: 14.4, center, duration: 3000, easing: (v) => 1 - Math.pow(1 - v, 4) });
+            map.easeTo({ pitch: 78, bearing: -28, zoom: 14.2, center, duration: 3000, easing: (v) => 1 - Math.pow(1 - v, 4) });
             map.once('moveend', () => {
               for (const ev of ['mousedown', 'wheel', 'touchstart', 'keydown']) map.once(ev, stopOrbit);
               startOrbit();
@@ -206,16 +207,48 @@ export function createScanMap(container, scan, { onNodeSelect, onReady, onError 
     const f = map.queryRenderedFeatures(e.point, { layers: ids })[0];
     if (!f) return null;
     const p = f.properties;
-    const { lat, lng } = e.lngLat;
+    const n = nodes[p.node];
     return {
       index: p.node,
-      node: nodes[p.node],
-      dist: Math.round(haversine(lat, lng, nodes[p.node].lat, nodes[p.node].lng)),
-      businessDist: selfNode ? Math.round(haversine(lat, lng, selfNode.lat, selfNode.lng)) : null,
+      node: n,
+      dist: Math.round(haversine(p.clat, p.clng, n.lat, n.lng)),
+      businessDist: selfNode ? Math.round(haversine(p.clat, p.clng, selfNode.lat, selfNode.lng)) : null,
       est: p.est >= 0 ? p.est : null,
       height: p.height,
+      from: [p.clng, p.clat],
     };
   }
+
+  function showLink(hit) {
+    const src = map.getSource(IDS.link);
+    if (!src) return;
+    src.setData(
+      hit
+        ? { type: 'Feature', geometry: { type: 'LineString', coordinates: [hit.from, [hit.node.lng, hit.node.lat]] }, properties: {} }
+        : EMPTY,
+    );
+  }
+
+  const sun = document.createElement('div');
+  sun.className = 'scan-sun';
+  container.appendChild(sun);
+
+  function updateSun() {
+    const pitch = map.getPitch();
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    if (pitch < 62 || !w) {
+      sun.style.opacity = '0';
+      return;
+    }
+    const delta = ((SUN_AZIMUTH - map.getBearing() + 540) % 360) - 180;
+    const horizon = h / 2 - (h / 2) * (Math.tan(((90 - pitch) * Math.PI) / 180) / Math.tan((36.87 / 2) * (Math.PI / 180)));
+    const x = w / 2 + (delta / 28) * (w / 2);
+    sun.style.left = x - 110 + 'px';
+    sun.style.top = Math.max(-40, horizon - 0.1 * h) - 110 + 'px';
+    sun.style.opacity = String(Math.max(0, Math.min(1, 1.6 - Math.abs(delta) / 30)));
+  }
+  map.on('render', updateSun);
 
   map.once('load', () => {
     for (const id of Object.values(IDS)) map.addSource(id, { type: 'geojson', data: EMPTY });
@@ -247,6 +280,7 @@ export function createScanMap(container, scan, { onNodeSelect, onReady, onError 
       map.getCanvas().style.cursor = hit ? "pointer" : "";
       if (!hit && hovered === null) return;
       hovered = hit ? hit.index : null;
+      showLink(hit ?? selected);
       onNodeSelect?.(hit ? { ...hit, hover: true } : selected);
     });
   });
@@ -254,6 +288,7 @@ export function createScanMap(container, scan, { onNodeSelect, onReady, onError 
     const hit = pick(e);
     if (!hit) return;
     selected = { ...hit, hover: false };
+    showLink(selected);
     onNodeSelect?.(selected);
   });
 
