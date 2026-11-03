@@ -9,7 +9,7 @@ import { rankColor } from './rank-colors.js';
 maplibregl.setWorkerUrl(new URL('maplibre/maplibre-gl-worker.mjs', document.baseURI).href);
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
-const MAX_TILES = 56;
+const MAX_TILES = 36;
 const MAX_VIEW_METERS = 7500;
 const MIN_BUILDING_ZOOM = 12.6;
 const NEAR = 2500;
@@ -112,6 +112,24 @@ export function createScanMap(container, scan, { onNodeSelect, onReady, onError 
     };
   }
 
+  const addQueue = [];
+  let draining = false;
+  function queueTile(x, y, data, distance) {
+    addQueue.push([x, y, data, distance]);
+    if (draining) return;
+    draining = true;
+    const drain = () => {
+      const job = addQueue.shift();
+      if (!job || destroyed) {
+        draining = false;
+        return;
+      }
+      addTile(...job);
+      setTimeout(drain, 140);
+    };
+    drain();
+  }
+
   function renderDeck() {
     overlay.setProps({ layers: [...tiles.values()].flatMap((t) => t.layers) });
   }
@@ -173,7 +191,7 @@ export function createScanMap(container, scan, { onNodeSelect, onReady, onError 
       loadTile(t.x, t.y)
         .then((data) => {
           pending.delete(key);
-          addTile(t.x, t.y, data, t.d);
+          queueTile(t.x, t.y, data, t.d);
           if (!firstReady) {
             firstReady = true;
             onReady?.({ tiles: tiles.size });
@@ -206,20 +224,35 @@ export function createScanMap(container, scan, { onNodeSelect, onReady, onError 
     }, 350);
   };
 
+  function footprintAnchor(object, coordinate) {
+    const g = object.geometry;
+    const rings = g.type === 'Polygon' ? [g.coordinates[0]] : g.coordinates.map((p) => p[0]);
+    let best = null;
+    for (const ring of rings) {
+      for (const [lng, lat] of ring) {
+        const d = haversine(coordinate[1], coordinate[0], lat, lng);
+        if (!best || d < best.d) best = { d, lng, lat };
+      }
+    }
+    return best ? [best.lng, best.lat] : coordinate;
+  }
+
   function pick(e) {
     if (!tiles.size) return null;
     const info = overlay.pickObject({ x: e.point.x, y: e.point.y, radius: 2 });
     if (!info || !info.object || info.object.properties?.node === undefined) return null;
     const p = info.object.properties;
-    const n = nodes[p.node];
+    const [lng, lat] = info.coordinate ? footprintAnchor(info.object, info.coordinate) : [p.clng, p.clat];
+    const est = estimate(lat, lng);
+    const n = nodes[est.node];
     return {
-      index: p.node,
+      index: est.node,
       node: n,
-      dist: Math.round(haversine(p.clat, p.clng, n.lat, n.lng)),
-      businessDist: selfNode ? Math.round(haversine(p.clat, p.clng, selfNode.lat, selfNode.lng)) : null,
-      est: p.est >= 0 ? p.est : null,
+      dist: Math.round(est.dist),
+      businessDist: selfNode ? Math.round(haversine(lat, lng, selfNode.lat, selfNode.lng)) : null,
+      est: est.rank != null && est.conf >= 0.5 ? Math.round(est.rank * 10) / 10 : null,
       height: p.height,
-      from: [p.clng, p.clat],
+      from: [lng, lat],
     };
   }
 
