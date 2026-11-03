@@ -36,6 +36,8 @@ uniform float uScanWin;
 uniform float uFacade;
 uniform float uShop;
 uniform float uWinGlow;
+uniform float uRoof;
+uniform float uFacadeScan;
 uniform float uTime;
 uniform vec2 uFocus;
 uniform float uFocusR;
@@ -110,6 +112,8 @@ export function createMaterials(field) {
     uFacade: { value: 0.6 },
     uShop: { value: 1.1 },
     uWinGlow: { value: 1.25 },
+    uRoof: { value: 0.08 },
+    uFacadeScan: { value: 0.22 },
     uTime: { value: 0 },
     uFocus: { value: new THREE.Vector2() },
     uFocusR: { value: 5000 },
@@ -153,7 +157,7 @@ export function createMaterials(field) {
           diffuseColor.rgb = mix(diffuseColor.rgb, mix(vec3(0.16, 0.2, 0.25), vec3(0.02, 0.025, 0.035), smoothstep(0.0, 0.4, uNight)), gWin);
         } else {
           vec3 zinc = mix(vec3(0.17, 0.2, 0.24), vec3(0.3, 0.31, 0.33), fract(seed * 5.1 + cellTone * 0.6));
-          diffuseColor.rgb = mix(zinc, gF.rgb, gF.a * 0.14);
+          diffuseColor.rgb = mix(zinc, gF.rgb, gF.a * uRoof);
         }
         if (uScan > 0.5) {
           float shade = vMeta.x < 0.5 ? mix(0.62, 1.0, smoothstep(0.0, 12.0, vWall.y)) * (1.0 - gWin * 0.28) : 0.68;
@@ -172,7 +176,7 @@ export function createMaterials(field) {
           float scanned = max(step(rnd2, gF.a * uScanWin), gF.a * uScan);
           vec3 win = mix(tint, gF.rgb * 1.3, scanned);
           totalEmissiveRadiance += win * gWin * step(rnd, density) * uNight * (0.65 + 0.65 * fract(rnd * 31.0)) * mix(uWinGlow, uColorWin, uScan);
-          totalEmissiveRadiance += mix(warm * 0.5, gF.rgb * 0.9, gF.a * mix(0.38, 1.0, uScan)) * (1.0 - gDetail) * density * uFacade * uNight;
+          totalEmissiveRadiance += mix(warm * 0.5, gF.rgb * 0.9, gF.a * mix(uFacadeScan, 1.0, uScan)) * (1.0 - gDetail) * density * uFacade * uNight;
           float shop = (1.0 - smoothstep(3.0, 3.5, vWall.y)) * smoothstep(0.6, 1.2, vWall.y);
           totalEmissiveRadiance += warm * shop * step(0.45, fract(floor(vWall.x * 0.14) * 0.37 + vMeta.y * 9.0)) * uNight * uShop;
         } else {

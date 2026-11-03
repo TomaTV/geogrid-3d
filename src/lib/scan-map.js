@@ -150,6 +150,8 @@ export function createScanMap(container, scan, options) {
     u.uFacade.value = p.scan.facade;
     u.uShop.value = p.scan.shop;
     u.uWinGlow.value = p.scan.winGlow;
+    u.uRoof.value = p.scan.roof;
+    u.uFacadeScan.value = p.scan.facadeScan;
   }
 
   function applyPreset(p) {
