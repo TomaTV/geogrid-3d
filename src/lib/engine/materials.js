@@ -140,7 +140,7 @@ export function createMaterials(field) {
       `,
       emissive: /* glsl */ `
         if (uScan > 0.5) totalEmissiveRadiance += gF.rgb * smoothstep(0.03, 0.55, gF.a) * (0.03 + 0.08 * uNight);
-        if (vMeta.x < 0.5 && uScan < 0.5) totalEmissiveRadiance += gF.rgb * gF.a * (1.0 - smoothstep(0.0, 13.0, vWall.y)) * (0.1 + 0.22 * uNight);
+        if (vMeta.x < 0.5 && uScan < 0.5) totalEmissiveRadiance += gF.rgb * gF.a * (1.0 - smoothstep(0.0, 13.0, vWall.y)) * (0.05 + 0.12 * uNight);
         if (vMeta.x < 0.5) {
           vec3 warm = vec3(1.0, 0.68, 0.36);
           float rnd = hash21(floor(gCell) + vec2(vMeta.y * 91.0, vMeta.y * 37.0));
@@ -150,7 +150,7 @@ export function createMaterials(field) {
           float scanned = max(step(rnd2, gF.a * 0.6), gF.a * uScan);
           vec3 win = mix(tint, gF.rgb * 1.3, scanned);
           totalEmissiveRadiance += win * gWin * step(rnd, density) * uNight * (0.65 + 0.65 * fract(rnd * 31.0)) * mix(1.25, 0.9, uScan);
-          totalEmissiveRadiance += mix(warm * 0.5, gF.rgb * 0.9, gF.a * mix(0.55, 1.0, uScan)) * (1.0 - gDetail) * density * 0.6 * uNight;
+          totalEmissiveRadiance += mix(warm * 0.5, gF.rgb * 0.9, gF.a * mix(0.22, 1.0, uScan)) * (1.0 - gDetail) * density * 0.6 * uNight;
           float shop = (1.0 - smoothstep(3.0, 3.5, vWall.y)) * smoothstep(0.6, 1.2, vWall.y);
           totalEmissiveRadiance += warm * shop * step(0.45, fract(floor(vWall.x * 0.14) * 0.37 + vMeta.y * 9.0)) * uNight * 1.1;
         } else {
@@ -179,11 +179,11 @@ export function createMaterials(field) {
         diffuseColor.rgb = mix(vec3(0.05, 0.052, 0.057), vec3(0.2, 0.19, 0.18), vRoad.z > 5.0 ? kerb : 0.0);
         float dash = step(0.5, fract(vRoad.y / 7.0)) * (1.0 - smoothstep(0.015, 0.04, across)) * step(7.0, vRoad.z);
         diffuseColor.rgb += dash * 0.3;
-        diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.5, gF.a * 0.4);
+        diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.5, gF.a * 0.4 * uScan);
       `,
       emissive: /* glsl */ `
         float edge = smoothstep(0.55, 0.8, abs(vRoad.x)) * (1.0 - smoothstep(0.8, 1.0, abs(vRoad.x)));
-        totalEmissiveRadiance += mix(vec3(0.9, 0.6, 0.3) * 0.16, gF.rgb * 0.6, gF.a) * (0.12 + 0.75 * edge) * uNight;
+        totalEmissiveRadiance += mix(vec3(0.9, 0.6, 0.3) * 0.16, gF.rgb * 0.6, gF.a) * (0.05 + 0.7 * edge) * uNight;
         if (vRoad.z > 5.0 && uNight > 0.0) {
           float side = vRoad.x > 0.0 ? 1.0 : -1.0;
           float lane = 1.0 - smoothstep(0.1, 0.22, abs(abs(vRoad.x) - 0.38));
@@ -201,7 +201,7 @@ export function createMaterials(field) {
   );
 
   const groundEmission = /* glsl */ `
-    totalEmissiveRadiance += gF.rgb * gF.a * (0.03 + 0.1 * uNight);
+    totalEmissiveRadiance += gF.rgb * gF.a * uScan * (0.03 + 0.1 * uNight);
     totalEmissiveRadiance += vec3(0.4, 1.0, 0.75) * revealRing(vW.xz) * 2.0;
   `;
 
@@ -213,7 +213,7 @@ export function createMaterials(field) {
       color: /* glsl */ `
         gF = sampleField(vW.xz);
         diffuseColor.rgb *= 0.78 + 0.44 * vnoise(vW.xz * 0.09);
-        diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.45, gF.a * 0.25);
+        diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.45, gF.a * 0.25 * uScan);
       `,
       emissive: groundEmission,
     },
@@ -228,7 +228,7 @@ export function createMaterials(field) {
       fragmentHead: 'vec4 gF;',
       color: /* glsl */ `
         gF = sampleField(vW.xz);
-        diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.5, gF.a * 0.4);
+        diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.5, gF.a * 0.4 * uScan);
       `,
       emissive: groundEmission,
     },
