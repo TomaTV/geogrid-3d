@@ -60,3 +60,7 @@ La clé `gk_live_...` a été collée dans une conversation : à révoquer aprè
 4. Pas d'occlusion ambiante en post-traitement (assombrissement simple en bas des murs). `GTAOPass` possible si le GPU suit.
 5. Un scan complet avec un mot-clé local donnerait des couleurs plus riches que la fixture partielle.
 6. README et repo public de rendu.
+
+## Réglages par mode
+
+Dans `src/lib/engine/sky.js`, chaque preset porte `scan` (présence du scan en mode normal : routes, sol, murs, fenêtres) et `colors` (mix, glow, fenêtres, et surcharges de lumière ou de brouillard quand Building colors est actif). `applyLook()` dans `scan-map.js` les applique. Le champ couvre toute la zone du scan (poids en inverse de la distance), le bord seul s'estompe. Zone chargée : cercle de 3 à 7 km selon le zoom.

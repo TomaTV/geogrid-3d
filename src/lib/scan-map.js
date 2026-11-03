@@ -121,21 +121,42 @@ export function createScanMap(container, scan, options) {
   let shadowAt = -10;
   const shadowAnchor = new THREE.Vector3(1e9, 0, 0);
 
+  let currentPreset = null;
+  let scanOn = false;
+
+  // Chaque mode porte ses réglages (presets dans sky.js), avec des surcharges quand Building colors est actif.
+  function applyLook() {
+    const p = currentPreset;
+    const c = scanOn ? p.colors : {};
+    const u = mats.uniforms;
+    sun.color.set(c.sun ?? p.sun);
+    sun.intensity = c.sunPower ?? p.sunPower;
+    hemi.color.set(c.hemi ?? p.hemi ?? p.mid);
+    hemi.groundColor.set(p.fog);
+    hemi.intensity = (c.envPower ?? p.envPower) * 2.6;
+    renderer.toneMappingExposure = c.exposure ?? p.exposure;
+    bloom.strength = c.bloom ?? p.bloom;
+    fogBase = c.fogDensity ?? p.fogDensity;
+    scene.fog.density = fogBase;
+    u.uScan.value = scanOn ? 1 : 0;
+    u.uColorMix.value = p.colors.mix;
+    u.uColorGlow.value = p.colors.glow;
+    u.uColorWin.value = p.colors.win;
+    u.uScanRoad.value = p.scan.road;
+    u.uScanGround.value = p.scan.ground;
+    u.uScanGroundGlow.value = p.scan.groundGlow;
+    u.uScanWall.value = p.scan.wall;
+    u.uScanWin.value = p.scan.win;
+  }
+
   function applyPreset(p) {
+    currentPreset = p;
     sky.apply(p);
-    sun.color.set(p.sun);
-    sun.intensity = p.sunPower;
     sun.userData.dir = sunDirection(p);
     scene.fog.color.set(p.fog);
-    scene.fog.density = p.fogDensity;
     mats.uniforms.uNight.value = p.night;
-    renderer.toneMappingExposure = p.exposure;
-    hemi.color.set(p.hemi ?? p.mid);
-    hemi.groundColor.set(p.fog);
-    hemi.intensity = p.envPower * 2.6;
-    bloom.strength = p.bloom;
     lightLandmarks(p.night);
-    fogBase = p.fogDensity;
+    applyLook();
     const envScene = new THREE.Scene();
     envScene.add(new THREE.Mesh(sky.mesh.geometry, sky.mesh.material));
     const next = pmrem.fromScene(envScene, 0.02, 0.1, 10);
@@ -836,7 +857,8 @@ export function createScanMap(container, scan, options) {
   return {
     zoom: zoomBy,
     setScanColors(on) {
-      mats.uniforms.uScan.value = on ? 1 : 0;
+      scanOn = on;
+      applyLook();
     },
     setTime(name) {
       clearInterval(liveTimer);

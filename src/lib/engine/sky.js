@@ -4,18 +4,26 @@ export const PRESETS = {
   standard: {
     elevation: 40, azimuth: 215, sun: '#b9c6ea', sunPower: 0.85, envPower: 0.3, night: 0.85, stars: 0.35, sunDisc: 0, hemi: '#5d6880',
     zenith: '#070b14', mid: '#0c1320', horizon: '#141c2b', fog: '#121926', fogDensity: 0.00036, exposure: 1.05, bloom: 0.2, clouds: '#161e2e',
+    scan: { road: 0.85, ground: 0.45, groundGlow: 0.115, wall: 0.24, win: 0.75 },
+    colors: { mix: 0.9, glow: 0.125, win: 0.9 },
   },
   dusk: {
     elevation: 5.5, azimuth: 248, sun: '#ffa868', sunPower: 3.7, envPower: 0.6, hemi: '#a59ea8', night: 0.72, stars: 0.12, sunDisc: 1,
     zenith: '#17294f', mid: '#59608a', horizon: '#f08f58', fog: '#5d5a6c', fogDensity: 0.00036, exposure: 1.0, bloom: 0.22, clouds: '#ff9c72',
+    scan: { road: 0.5, ground: 0.3, groundGlow: 0.06, wall: 0.12, win: 0.55 },
+    colors: { mix: 0.82, glow: 0.07, win: 0.4, sun: '#ffdcc4', sunPower: 2.1, hemi: '#9aa0b4', exposure: 0.95, bloom: 0.1, fogDensity: 0.00026 },
   },
   night: {
     elevation: 38, azimuth: 150, sun: '#7f9bd8', sunPower: 0.42, envPower: 0.32, night: 1, stars: 1, sunDisc: 0.12,
     zenith: '#02050f', mid: '#071024', horizon: '#14233f', fog: '#0c1526', fogDensity: 0.00046, exposure: 1.15, bloom: 0.2, clouds: '#1b2740',
+    scan: { road: 1, ground: 0.5, groundGlow: 0.13, wall: 0.28, win: 0.85 },
+    colors: { mix: 0.9, glow: 0.2, win: 0.9, fogDensity: 0.00034 },
   },
   day: {
     elevation: 44, azimuth: 205, sun: '#fff0da', sunPower: 2.3, envPower: 0.42, night: 0, stars: 0, sunDisc: 1,
     zenith: '#2a66b8', mid: '#6ea4dc', horizon: '#d6e6f3', fog: '#bfd2e2', fogDensity: 0.00034, exposure: 0.86, bloom: 0.06, clouds: '#ffffff',
+    scan: { road: 0.5, ground: 0.55, groundGlow: 0.03, wall: 0.05, win: 0 },
+    colors: { mix: 0.72, glow: 0.03, win: 0, sunPower: 2, fogDensity: 0.00024 },
   },
 };
 
@@ -92,7 +100,6 @@ export function createSky() {
         vec3 horizon = mix(uFog, uHorizon, side);
         vec3 c = mix(horizon, uMid, smoothstep(0.0, 0.2, h));
         c = mix(c, uZenith, smoothstep(0.12, 0.72, h));
-        c = mix(uFog, c, smoothstep(0.0, 0.18, h));
         c += uSunColor * pow(toSun, 9.0) * 0.32 * uDisc;
         c += uSunColor * pow(toSun, 90.0) * 0.8 * uDisc;
         c += uSunColor * smoothstep(0.99925, 0.99965, toSun) * 26.0 * uDisc;
@@ -111,7 +118,8 @@ export function createSky() {
             c += vec3(0.9, 0.95, 1.0) * step(0.994, s) * dot3 * (0.4 + 2.2 * fract(s * 97.0)) * uStars * (1.0 - cover) * smoothstep(0.03, 0.3, d.y);
           }
         }
-        if (d.y < 0.0) c = mix(c, uFog, smoothstep(0.0, -0.05, d.y));
+        // En dernier, soleil et nuages compris : au ras de l'horizon le ciel vaut exactement le brouillard du sol.
+        c = mix(uFog, c, smoothstep(0.0, 0.1, d.y));
         gl_FragColor = vec4(c, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
