@@ -16,4 +16,4 @@ Cliquer une rue pour obtenir le rang moyen sur ses immeubles, et le concurrent q
 
 ## Réutilisation du wizard de Geogrid
 
-Le formulaire « New scan » de l'app Angular reprend les mêmes champs que le wizard (adresse, mot-clé, commerce, grille). Une intégration dans Geogrid passerait par `src/hooks/useScanWizard.js` et un import dynamique client de MapLibre, comme Leaflet.
+Le formulaire « New scan » de l'app Angular reprend les mêmes champs que le wizard (adresse, mot-clé, commerce, grille). Le projet reste un projet d'école : ces idées ne sont pas prévues dans le produit pour le moment.
