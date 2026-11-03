@@ -7,11 +7,13 @@ import { ScanCard } from '../ui/scan-card';
   selector: 'app-scans',
   imports: [RouterLink, ScanCard],
   template: `
-    <section class="mx-auto max-w-6xl px-4 pb-16 sm:px-6">
-      <p class="eyebrow">01 · Collection</p>
-      <div class="mt-2 flex flex-wrap items-end justify-between gap-4">
-        <h1 class="display text-[44px]">Saved scans.</h1>
-        <a routerLink="/scans/new" class="btn btn-primary">New scan</a>
+    <section class="mx-auto max-w-[1400px] px-4 pb-16 sm:px-6">
+      <div class="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 class="font-display text-[clamp(1.8rem,4vw,2.4rem)] italic leading-[1.1] tracking-[-0.03em]"><span class="font-light text-white/60">Scan</span><span class="font-medium text-white">&nbsp;History</span></h1>
+          <p class="mt-1.5 text-[13px] text-white/30">Browse, edit and delete the scans you saved in 3D</p>
+        </div>
+        <a routerLink="/scans/new" class="btn btn-primary">Start Mapping</a>
       </div>
 
       @if (store.state() === 'ready' && store.count() > 0) {
@@ -30,9 +32,9 @@ import { ScanCard } from '../ui/scan-card';
       <div class="mt-8">
         @switch (store.state()) {
           @case ('loading') {
-            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div class="space-y-2">
               @for (i of [1, 2, 3]; track i) {
-                <div class="card h-[220px] animate-pulse"></div>
+                <div class="h-16 animate-pulse rounded-xl bg-white/[0.03]"></div>
               }
             </div>
           }
@@ -52,7 +54,8 @@ import { ScanCard } from '../ui/scan-card';
                 <a routerLink="/scans/new" class="btn btn-primary mt-6">Start mapping</a>
               </div>
             } @else {
-              <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div class="space-y-2">
+                <div class="hidden grid-cols-[minmax(0,2.2fr)_120px_minmax(80px,1fr)_70px_90px_auto] gap-x-4 px-4 pb-1 sm:grid"><span class="label !mb-0">Business</span><span class="label !mb-0">Tag</span><span class="label !mb-0">Rank spread</span><span class="label !mb-0 text-right">Top 3</span><span class="label !mb-0">Saved</span><span class="w-[190px]"></span></div>
                 @for (s of store.sorted(); track s.id) {
                   <app-scan-card [scan]="s" (edited)="edit($event)" (deleted)="remove($event)" />
                 }

@@ -9,31 +9,28 @@ import { rankColor } from '../../lib/rank-colors.js';
   selector: 'app-scan-card',
   imports: [RouterLink, DatePipe, FormsModule],
   template: `
-    <article class="card flex flex-col gap-4 p-5">
-      <div class="flex items-start justify-between gap-3">
+    <article class="group rounded-xl border border-white/[0.06] bg-white/[0.015] transition hover:bg-white/[0.03]">
+      <div class="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-3 px-4 py-3.5 sm:grid-cols-[minmax(0,2.2fr)_120px_minmax(80px,1fr)_70px_90px_auto]">
         <div class="min-w-0">
-          <p class="eyebrow truncate">{{ scan().keyword }}</p>
-          <h3 class="display mt-1 truncate text-[24px]">{{ scan().target_name }}</h3>
+          <p class="truncate text-[14px] font-medium">{{ scan().target_name }}</p>
+          <p class="mt-0.5 truncate font-mono text-[10px] uppercase tracking-[0.12em] text-white/35">{{ scan().keyword }}</p>
         </div>
-        <span class="pill shrink-0 text-white/50">{{ scan().tag || 'no tag' }}</span>
-      </div>
-
-      <div class="flex h-2 overflow-hidden rounded-full bg-white/[0.05]">
-        @for (b of bands(); track b.color) {
-          <span [style.width.%]="b.share" [style.background]="b.color"></span>
-        }
-      </div>
-
-      <div class="flex items-end justify-between">
-        <div>
-          <p class="eyebrow">In the top 3</p>
-          <p class="display mt-1 text-[30px]">{{ top3Percent() }}<span class="text-[16px] opacity-50">%</span></p>
+        <span class="pill hidden w-fit text-white/50 sm:inline-flex">{{ scan().tag || "no tag" }}</span>
+        <div class="hidden h-1.5 overflow-hidden rounded-full bg-white/[0.06] sm:flex">
+          @for (b of bands(); track b.color) {
+            <span [style.width.%]="b.share" [style.background]="b.color"></span>
+          }
         </div>
-        <p class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-white/35">{{ scan().grid_size }}x{{ scan().grid_size }} · {{ scan().saved_at | date: 'd MMM y' }}</p>
+        <p class="hidden text-right font-mono text-[12px] sm:block"><span class="display text-[18px]">{{ top3Percent() }}</span><span class="text-white/40">%</span></p>
+        <p class="hidden font-mono text-[10.5px] uppercase tracking-[0.1em] text-white/35 sm:block">{{ scan().saved_at | date: "d MMM y" }}</p>
+        <div class="flex items-center justify-end gap-1.5">
+          <a class="btn btn-primary !px-3 !py-1.5 text-[12px]" [routerLink]="['/scans', scan().id]">Open</a>
+          <button class="btn !px-3 !py-1.5 text-[12px]" (click)="startEdit()">Edit</button>
+          <button class="btn btn-danger !px-3 !py-1.5 text-[12px]" (click)="deleted.emit(scan().id)">Delete</button>
+        </div>
       </div>
-
       @if (editing()) {
-        <div class="space-y-2">
+        <div class="space-y-2 border-t border-white/[0.06] px-4 py-3">
           <input class="input" [(ngModel)]="draftTag" placeholder="Tag" maxlength="24" />
           <textarea class="input" rows="2" [(ngModel)]="draftNote" maxlength="200" placeholder="Note"></textarea>
           <div class="flex gap-2">
@@ -41,15 +38,8 @@ import { rankColor } from '../../lib/rank-colors.js';
             <button class="btn" (click)="editing.set(false)">Cancel</button>
           </div>
         </div>
-      } @else {
-        @if (scan().note) {
-          <p class="text-[12.5px] leading-snug text-white/55">{{ scan().note }}</p>
-        }
-        <div class="mt-auto flex flex-wrap gap-2">
-          <a class="btn btn-primary" [routerLink]="['/scans', scan().id]">Open in 3D</a>
-          <button class="btn" (click)="startEdit()">Edit</button>
-          <button class="btn btn-danger" (click)="deleted.emit(scan().id)">Delete</button>
-        </div>
+      } @else if (scan().note) {
+        <p class="border-t border-white/[0.06] px-4 py-2.5 text-[12px] text-white/45">{{ scan().note }}</p>
       }
     </article>
   `,
