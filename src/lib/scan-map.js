@@ -79,7 +79,7 @@ export function createScanMap(container, scan, options) {
 
   const sun = new THREE.DirectionalLight(0xffffff, 3);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(3072, 3072);
   sun.shadow.normalBias = 1.6;
   sun.shadow.bias = -0.0004;
   scene.add(sun, sun.target);
@@ -664,7 +664,10 @@ export function createScanMap(container, scan, options) {
 
   function updateShadow() {
     const t = controls.target;
-    const S = THREE.MathUtils.clamp(camera.position.distanceTo(t) * 1.5, 260, 2600);
+    const camDist = camera.position.distanceTo(t);
+    // La boîte d'ombre couvre le cercle chargé (pas de bord carré visible) ; au dézoom les ombres s'effacent, la carte n'a plus la résolution.
+    const S = Math.min(focusRadius(camDist) * 1.02, 4600);
+    sun.shadow.intensity = 1 - THREE.MathUtils.smoothstep(camDist, 1900, 3200);
     const c = sun.shadow.camera;
     if (now - shadowAt < 0.7) return;
     if (!shadowDirty && shadowAnchor.distanceTo(t) < S * 0.2 && Math.abs(c.right - S) < S * 0.3) return;

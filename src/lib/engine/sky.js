@@ -8,9 +8,9 @@ export const PRESETS = {
     colors: { mix: 0.72, glow: 0.06, win: 0.75 },
   },
   dusk: {
-    elevation: 5.5, azimuth: 248, sun: '#ffa868', sunPower: 3.7, envPower: 0.6, hemi: '#a59ea8', night: 0.72, stars: 0.12, sunDisc: 1,
+    elevation: 9, azimuth: 248, sun: '#ffa868', sunPower: 3.7, envPower: 0.6, hemi: '#a59ea8', night: 0.72, stars: 0.12, sunDisc: 1,
     zenith: '#17294f', mid: '#59608a', horizon: '#f08f58', fog: '#5d5a6c', fogDensity: 0.00036, exposure: 1.0, bloom: 0.22, clouds: '#ff9c72',
-    scan: { road: 0.5, ground: 0.3, groundGlow: 0.06, wall: 0.12, win: 0.55, facade: 0.6, shop: 1.1, winGlow: 1.25, roof: 0.1, facadeScan: 0.38 },
+    scan: { road: 0, ground: 0, groundGlow: 0, wall: 0, win: 0, facade: 0.6, shop: 1.1, winGlow: 1.25, roof: 0, facadeScan: 0 },
     colors: { mix: 0.82, glow: 0.07, win: 0.4, sun: '#ffdcc4', sunPower: 2.1, hemi: '#9aa0b4', exposure: 0.95, bloom: 0.1, fogDensity: 0.00026 },
   },
   night: {
@@ -22,7 +22,7 @@ export const PRESETS = {
   day: {
     elevation: 44, azimuth: 205, sun: '#ffe9cc', sunPower: 2.5, envPower: 0.3, hemi: '#c6cbd2', night: 0, stars: 0, sunDisc: 1,
     zenith: '#1f5cb4', mid: '#62a0e0', horizon: '#dcebf6', fog: '#c8dbea', fogDensity: 0.00017, exposure: 0.8, bloom: 0.06, clouds: '#ffffff',
-    scan: { road: 0.5, ground: 0.55, groundGlow: 0.03, wall: 0.05, win: 0, facade: 0.6, shop: 1.1, winGlow: 1.25, roof: 0.04, facadeScan: 0 },
+    scan: { road: 0, ground: 0, groundGlow: 0, wall: 0, win: 0, facade: 0.6, shop: 1.1, winGlow: 1.25, roof: 0, facadeScan: 0 },
     colors: { mix: 0.72, glow: 0.03, win: 0, sunPower: 2, fogDensity: 0.00014 },
   },
 };
