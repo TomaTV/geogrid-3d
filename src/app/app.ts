@@ -7,35 +7,28 @@ import { filter, map } from 'rxjs';
   selector: 'app-root',
   imports: [RouterOutlet, RouterLink, RouterLinkActive],
   template: `
-    <a routerLink="/" class="fixed left-4 top-4 z-40 flex items-center gap-2 rounded-full border border-white/10 bg-bg/80 py-2 pl-3 pr-3.5 backdrop-blur-xl sm:left-6">
-      <img src="logo.svg" alt="Geogrid" class="h-[16px] w-[16px]" />
-      <span class="text-[13px] font-semibold tracking-tight">Geogrid</span>
-      <span class="font-mono text-[9px] uppercase tracking-[0.14em] text-accent">3D</span>
+    <a routerLink="/" class="fixed left-4 top-4 z-40 flex h-[44px] items-center px-1 sm:left-6">
+      <img src="geogrid3d.svg" alt="Geogrid 3D" class="h-[17px] w-auto drop-shadow-[0_1px_8px_rgba(0,0,0,0.8)]" />
     </a>
 
-    <nav class="fixed right-4 top-4 z-40 hidden items-center gap-1 rounded-full border border-white/10 bg-bg/80 p-1 backdrop-blur-xl sm:right-6 sm:flex">
-      @for (l of links; track l.path) {
-        <a [routerLink]="l.path" routerLinkActive="!bg-accent/15 !text-accent" [routerLinkActiveOptions]="{ exact: true }"
-           class="rounded-full px-3.5 py-1.5 text-[12px] font-medium text-white/70 transition hover:bg-white/[0.06] hover:text-white">{{ l.label }}</a>
-      }
-    </nav>
-
-    <button class="fixed right-4 top-4 z-40 grid h-[40px] w-[40px] place-items-center rounded-full border border-white/10 bg-bg/80 backdrop-blur-xl sm:hidden"
-            (click)="open.set(!open())" aria-label="Menu">
-      <span class="relative block h-[10px] w-[16px]">
-        <i class="absolute left-0 top-0 h-[1.5px] w-full bg-white/80 transition" [class.translate-y-[4px]]="open()" [class.rotate-45]="open()"></i>
-        <i class="absolute bottom-0 left-0 h-[1.5px] w-full bg-white/80 transition" [class.-translate-y-[4px]]="open()" [class.-rotate-45]="open()"></i>
+    <button class="fixed right-4 top-4 z-50 flex h-[44px] items-center gap-3 px-1 sm:right-6" (click)="open.set(!open())" [attr.aria-expanded]="open()" aria-label="Menu">
+      <span class="font-mono text-[11px] uppercase tracking-[0.18em] text-white drop-shadow-[0_1px_8px_rgba(0,0,0,0.8)]">{{ open() ? "Close" : "Menu" }}</span>
+      <span class="relative grid h-[14px] w-[18px] place-items-center">
+        <i class="absolute h-[1.5px] w-[18px] bg-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)] transition duration-300" [class.rotate-45]="open()" [class.-translate-y-[4px]]="!open()"></i>
+        <i class="absolute h-[1.5px] w-[18px] bg-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)] transition duration-300" [class.-rotate-45]="open()" [class.translate-y-[4px]]="!open()"></i>
       </span>
     </button>
+
     @if (open()) {
-      <nav class="fixed right-4 top-[62px] z-40 w-[220px] rounded-2xl border border-white/10 bg-bg/90 p-2 backdrop-blur-2xl sm:hidden">
+      <div class="fixed inset-0 z-40" (click)="open.set(false)"></div>
+      <nav class="fixed right-4 top-[64px] z-50 flex flex-col items-end gap-1 sm:right-6">
         @for (l of links; track l.path) {
-          <a [routerLink]="l.path" routerLinkActive="!text-accent" [routerLinkActiveOptions]="{ exact: true }" (click)="open.set(false)"
-             class="block rounded-xl px-3 py-3 text-[13px] font-medium text-white/75 transition hover:bg-white/[0.05]">{{ l.label }}</a>
+          <a [routerLink]="l.path" routerLinkActive="active-link" [routerLinkActiveOptions]="{ exact: true }" (click)="open.set(false)"
+             class="px-1 py-1.5 text-right text-[22px] font-medium tracking-tight text-white/80 drop-shadow-[0_2px_12px_rgba(0,0,0,0.85)] transition hover:text-white [&.active-link]:text-accent">{{ l.label }}</a>
         }
       </nav>
     }
-    <main [class.pt-20]="!immersive()"><router-outlet /></main>
+    <main [class.pt-24]="!immersive()"><router-outlet /></main>
   `,
 })
 export class App {
