@@ -70,7 +70,7 @@ Dans `src/lib/engine/sky.js`, chaque preset porte :
 ## À faire (reprise : mercredi 2026-11-04 après-midi)
 
 1. Wizard : ajouter à l'étape 3 ce qui manque par rapport à Geogrid (taille de grille, rayon, résumé), demandé par Thomas.
-2. README français (l'actuel est celui généré par Angular), logo, bannière, captures 390 px et desktop.
+2. README : le texte est fait, reste logo, bannière, captures 390 px et desktop.
 3. Repo public `TomaTV/geogrid-3d` : contenu de `3d/` seulement, push sur accord de Thomas.
 4. Tester de bout en bout : création de scan depuis le wizard, collection, mode live.
 5. Vérifier en mobile 390 px avec le nouveau moteur.

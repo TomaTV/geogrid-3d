@@ -1,59 +1,103 @@
-# Geogrid3d
+# Geogrid 3D
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 22.2.5.
+Projet d'école réalisé pour le cours Angular de l'IIM.
 
-## Development server
+[Geogrid](https://geogrid.dev) mesure la position d'un commerce sur Google Maps, point par point, sur une grille géographique. Geogrid 3D affiche ce résultat dans une ville en 3D : on se déplace dans les rues, on clique sur un immeuble, et le classement estimé à cet endroit s'affiche.
 
-To start a local development server, run:
+Le rang est mesuré aux points du scan, pas à chaque immeuble. Entre deux points, la couleur et le rang affichés sont une estimation.
 
-```bash
-ng serve
-```
+## Fonctionnalités
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+- **Ville 3D** : bâtiments, routes, eau et parcs d'OpenStreetMap, chargés autour de la caméra, avec arbres et toits générés.
+- **Modes d'affichage** : Standard (sombre), Real time (soleil selon l'heure et le lieu du scan), Dusk, Day et Night.
+- **Building colors** : colore les immeubles selon le rang, avec la palette de Geogrid.
+- **Clic sur un immeuble** : rang estimé, point mesuré le plus proche, distance au commerce et meilleurs résultats à ce point.
+- **Collection** : les scans sont sauvegardés, modifiables (note, tag) et supprimables.
+- **Assistant de scan** : formulaire réactif en 3 étapes avec validation.
 
-## Code scaffolding
+## Prérequis
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+- Node.js et npm (développé avec Node 24 et npm 11)
+- Un navigateur avec WebGL2 et une carte graphique correcte
+- Une connexion internet pour les tuiles de carte
 
-```bash
-ng generate component component-name
-```
-
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the project run:
+## Installation et lancement
 
 ```bash
-ng build
+npm install
+npm run dev
 ```
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+L'application s'ouvre sur http://localhost:4200.
 
-## Running unit tests
+`npm run dev` lance trois processus :
 
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
+| Processus | Port | Rôle |
+|---|---|---|
+| `ng serve` | 4200 | Application Angular |
+| `npm run api` | 3001 | json-server, API de la collection |
+| `npm run proxy` | 3002 | Proxy vers l'API Geogrid, utile en mode live |
+
+Au premier lancement, `db.json` est créé à partir de `db.seed.json`. Ce fichier n'est pas versionné : supprimez-le pour revenir aux données de départ.
+
+## Mode mock et mode live
+
+Le mode se choisit avec `SCAN_MODE` dans `src/app/data/scan.ts`.
+
+- **`mock`** (par défaut) : le résultat vient d'un vrai scan Geogrid figé dans `public/mock/`. Aucune clé ni aucun crédit nécessaire.
+- **`live`** : lance un vrai scan via l'API de Geogrid. Chaque point coûte un crédit, et il faut une clé d'un compte payant :
 
 ```bash
-ng test
+cp .env.example .env
+# puis renseigner GEOGRID_API_KEY dans .env
 ```
 
-## Running end-to-end tests
+La clé reste côté serveur : le proxy ajoute l'en-tête `Authorization`, le navigateur ne la voit jamais. Le fichier `.env` est ignoré par git.
 
-For end-to-end (e2e) testing, run:
+## Build
 
 ```bash
-ng e2e
+npm run build
 ```
 
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
+Le résultat est généré dans `dist/geogrid-3d/`. Il s'agit de fichiers statiques : la collection a besoin de json-server, qui n'en fait pas partie.
 
-## Additional Resources
+## Architecture
 
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+```
+src/
+  app/
+    data/     ScanStore (signaux) et ScanSource (mock ou live)
+    pages/    Explore, collection, nouveau scan, détail, à propos
+    ui/       Composants standalone : carte, vue du scan, carte de scan, légende
+  lib/        Moteur 3D en JavaScript, sans dépendance à Angular
+    scan-map.js          Rendu, caméra, chargement, sélection
+    engine/tile.worker.js  Construction de la géométrie dans des workers
+    engine/field.js      Estimation du rang en tout point
+    engine/materials.js  Shaders
+    engine/sky.js        Ciel et réglages de chaque mode
+    engine/landmarks.js  Tour Eiffel et pyramide du Louvre
+server/proxy.mjs         Proxy de la clé API
+```
+
+## Notions Angular utilisées
+
+- Composants standalone avec `input()` et `output()`
+- Service `ScanStore` : signal privé, vue en lecture seule, `computed()` (rang moyen, part du top 3, tri)
+- Routes chargées à la demande, dont `/scans/:id` avec paramètre
+- Formulaire réactif avec validateurs et erreurs affichées sous les champs
+- CRUD sur json-server avec nouvelles tentatives et annulation du changement local si l'écriture échoue
+- États de chargement, d'erreur et de liste vide
+
+## Technologies
+
+Angular 22, Three.js, Tailwind CSS v4, json-server, tuiles [OpenFreeMap](https://openfreemap.org).
+
+Données cartographiques : © [OpenMapTiles](https://www.openmaptiles.org/), © les contributeurs [OpenStreetMap](https://www.openstreetmap.org/copyright). Le rendu s'inspire de [Streets GL](https://github.com/StrandedKitty/streets-gl), sans en reprendre le code.
+
+## Limites connues
+
+- La création de scan depuis l'assistant et le mode live n'ont pas encore été testés de bout en bout.
+- Le scan d'exemple est partiel (44 points) : les couleurs sont moins riches qu'avec un scan complet.
+- Les hauteurs absentes d'OpenStreetMap sont estimées d'après la taille au sol du bâtiment.
+- Sur une machine modeste, activer **Low power** dans Settings.
