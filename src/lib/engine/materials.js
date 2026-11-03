@@ -112,7 +112,7 @@ export function createMaterials(field) {
           vec2 c = vec2(vWall.x / 3.7, (vWall.y - 0.4) / 3.3);
           vec2 fw = fwidth(c);
           gCell = c;
-          gDetail = 1.0 - smoothstep(0.1, 0.34, max(fw.x, fw.y));
+          gDetail = 1.0 - smoothstep(0.17, 0.5, max(fw.x, fw.y));
           float ao = mix(0.45, 1.0, smoothstep(0.0, 9.0, vWall.y));
           float cornice = 0.0;
           float balcony = 0.0;
@@ -150,7 +150,7 @@ export function createMaterials(field) {
           float scanned = max(step(rnd2, gF.a * 0.6), gF.a * uScan);
           vec3 win = mix(tint, gF.rgb * 1.3, scanned);
           totalEmissiveRadiance += win * gWin * step(rnd, density) * uNight * (0.65 + 0.65 * fract(rnd * 31.0)) * mix(1.25, 0.9, uScan);
-          totalEmissiveRadiance += mix(warm * 0.3, gF.rgb * 0.8, gF.a * mix(0.55, 1.0, uScan)) * (1.0 - gDetail) * density * 0.42 * uNight;
+          totalEmissiveRadiance += mix(warm * 0.5, gF.rgb * 0.9, gF.a * mix(0.55, 1.0, uScan)) * (1.0 - gDetail) * density * 0.6 * uNight;
           float shop = (1.0 - smoothstep(3.0, 3.5, vWall.y)) * smoothstep(0.6, 1.2, vWall.y);
           totalEmissiveRadiance += warm * shop * step(0.45, fract(floor(vWall.x * 0.14) * 0.37 + vMeta.y * 9.0)) * uNight * 1.1;
         } else {
