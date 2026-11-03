@@ -80,7 +80,7 @@ export function overlayLayers() {
       id: IDS.nodes,
       type: 'circle',
       source: IDS.nodes,
-      minzoom: 12.5,
+      minzoom: 14.6,
       paint: {
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 2.2, 17, 6],
         'circle-color': ['get', 'color'],

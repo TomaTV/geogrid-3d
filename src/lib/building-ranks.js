@@ -49,30 +49,25 @@ function centroid(ring) {
 export function makeEstimator(nodes, step) {
   const lat0 = nodes[0].lat;
   const pts = nodes.map((n) => project(n.lat, n.lng, lat0));
+  const sigma = step * 0.75;
   return function estimate(lat, lng) {
     const [px, py] = project(lat, lng, lat0);
-    const ds = [];
-    for (let i = 0; i < pts.length; i++) ds.push([Math.hypot(pts[i][0] - px, pts[i][1] - py), i]);
-    ds.sort((a, b) => a[0] - b[0]);
-    const nearest = ds[0];
-    const measured = ds.filter(([, i]) => nodes[i].rank != null).slice(0, 4);
-    let rank = null;
-    let rgb = null;
-    if (measured.length && measured[0][0] < step * 2) {
-      let w = 0;
-      let s = 0;
-      const acc = [0, 0, 0];
-      for (const [d, i] of measured) {
-        const wi = 1 / Math.max(d, step * 0.15) ** 2;
-        w += wi;
-        s += wi * Math.min(nodes[i].rank, RANK_CAP);
-        nodeRgb(nodes[i].rank).forEach((v, k) => (acc[k] += wi * v));
-      }
-      rank = s / w;
-      rgb = acc.map((v) => v / w);
+    let nearest = [Infinity, 0];
+    let w = 0;
+    let rank = 0;
+    const acc = [0, 0, 0];
+    for (let i = 0; i < pts.length; i++) {
+      const d = Math.hypot(pts[i][0] - px, pts[i][1] - py);
+      if (d < nearest[0]) nearest = [d, i];
+      if (nodes[i].rank == null || d > sigma * 3.2) continue;
+      const wi = Math.exp(-((d / sigma) ** 2));
+      w += wi;
+      rank += wi * Math.min(nodes[i].rank, RANK_CAP);
+      nodeRgb(nodes[i].rank).forEach((v, k) => (acc[k] += wi * v));
     }
-    const conf = Math.max(0, Math.min(1, 1 - (nearest[0] - step * 0.9) / (step * 1.3)));
-    return { node: nearest[1], dist: nearest[0], rank, rgb, conf };
+    if (w < 1e-4) return { node: nearest[1], dist: nearest[0], rank: null, rgb: null, conf: 0 };
+    const x = Math.min(1, w / 0.7);
+    return { node: nearest[1], dist: nearest[0], rank: rank / w, rgb: acc.map((v) => v / w), conf: x * x * (3 - 2 * x) };
   };
 }
 
@@ -100,7 +95,7 @@ export function rankBuildings(features, estimate) {
         base: props.render_min_height ?? 0,
         node: e.node,
         dist: Math.round(e.dist),
-        est: e.rank == null || t < 0.35 ? -1 : Math.round(e.rank * 10) / 10,
+        est: e.rank == null || t < 0.5 ? -1 : Math.round(e.rank * 10) / 10,
         color: rgbHex(rgb),
       },
     });
