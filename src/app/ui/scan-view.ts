@@ -1,11 +1,11 @@
-import { Component, inject, input, signal } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { Component, input, signal } from '@angular/core';
 import { ScanMap } from './scan-map';
+import { RankLegend } from './rank-legend';
 import { formatRank, rankColor } from '../../lib/rank-colors.js';
 
 @Component({
   selector: 'app-scan-view',
-  imports: [ScanMap],
+  imports: [ScanMap, RankLegend],
   template: `
     @if (scan(); as s) {
       <div class="relative h-dvh w-full overflow-hidden">
@@ -29,10 +29,13 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
                 <p class="display mt-1 text-[40px]" [style.color]="color(a.node.rank)">{{ fmt(a.node.rank) }}</p>
               </div>
               <div class="pb-2 text-right">
-                <p class="eyebrow">Distance</p>
-                <p class="mt-1 font-mono text-[12px] text-white/70">{{ a.dist }} m</p>
+                <p class="eyebrow">Point is</p>
+                <p class="mt-1 font-mono text-[12px] text-white/70">{{ dist(a.dist) }} away</p>
               </div>
             </div>
+            @if (a.businessDist !== null) {
+              <p class="mt-2 font-mono text-[11px] text-white/45">{{ dist(a.businessDist) }} from {{ s.target_name }}</p>
+            }
             @if (a.est !== null) {
               <p class="mt-2 font-mono text-[11px] text-white/45">Estimated here about #{{ a.est }} (interpolated)</p>
             }
@@ -54,11 +57,7 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
           </aside>
         }
 
-        <div class="pointer-events-none absolute bottom-3 left-1/2 hidden -translate-x-1/2 items-center gap-4 rounded-full border border-white/10 bg-bg/80 px-4 py-2 backdrop-blur-xl sm:flex">
-          @for (l of legend; track l.label) {
-            <span class="eyebrow flex items-center gap-2"><i class="h-2 w-2 rounded-full" [style.background]="l.color"></i>{{ l.label }}</span>
-          }
-        </div>
+        <app-rank-legend class="pointer-events-none absolute bottom-3 left-1/2 hidden -translate-x-1/2 rounded-full border border-white/10 bg-bg/80 px-4 py-2 backdrop-blur-xl sm:flex" />
 
         @if (error()) {
           <div class="absolute inset-0 grid place-items-center bg-bg/80"><p class="eyebrow text-red-300/80">Buildings could not be loaded</p></div>
@@ -70,27 +69,14 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
   `,
 })
 export class ScanView {
-  private http = inject(HttpClient);
-  src = input('mock/scan-wsf-13.json');
-  scan = signal<any>(null);
+  scan = input.required<any>();
   active = signal<any>(null);
   loading = signal(true);
   error = signal(false);
   fmt = formatRank;
+  dist = (m: number) => (m >= 1000 ? (m / 1000).toFixed(1) + ' km' : m + ' m');
   color = rankColor;
-  legend = [
-    { label: '1', color: '#22c55e' },
-    { label: '2-3', color: '#34d399' },
-    { label: '4-5', color: '#86efac' },
-    { label: '6-10', color: '#fbbf24' },
-    { label: '11-15', color: '#f97316' },
-    { label: '16-20', color: '#ef4444' },
-    { label: '20+ / none', color: '#555555' },
-  ];
 
-  constructor() {
-    queueMicrotask(() => this.http.get<any>(this.src()).subscribe((r) => this.scan.set(r.data)));
-  }
 
   geogridUrl(id: string) {
     return 'https://geogrid.dev/dashboard/scans/' + id;
