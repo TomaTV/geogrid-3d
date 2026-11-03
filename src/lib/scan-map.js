@@ -147,6 +147,9 @@ export function createScanMap(container, scan, options) {
     u.uScanGroundGlow.value = p.scan.groundGlow;
     u.uScanWall.value = p.scan.wall;
     u.uScanWin.value = p.scan.win;
+    u.uFacade.value = p.scan.facade;
+    u.uShop.value = p.scan.shop;
+    u.uWinGlow.value = p.scan.winGlow;
   }
 
   function applyPreset(p) {
@@ -809,8 +812,9 @@ export function createScanMap(container, scan, options) {
     }
     renderedAt = now;
     updateShadow();
-    if (quality < 2) composer.render(delta);
-    else renderer.render(scene, camera);
+    // Toujours par le composer : en rendu direct, three applique le brouillard après la conversion sRGB et il ne raccorde plus avec le ciel (ligne à l'horizon).
+    bloom.enabled = quality < 2;
+    composer.render(delta);
 
     for (const l of labels) {
       v.copy(l.pos).project(camera);
