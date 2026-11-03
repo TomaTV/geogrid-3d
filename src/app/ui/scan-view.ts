@@ -11,12 +11,11 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
       <div class="relative h-dvh w-full overflow-hidden">
         <app-scan-map #map [scan]="s" [time]="time()" [scanColors]="scanColors()" (nodeSelected)="active.set($event)" (ready)="loading.set(false)" (failed)="fail()" />
 
-        <div class="absolute left-[132px] top-4 z-10 flex h-[40px] max-w-[calc(100%-200px)] items-center gap-3 rounded-xl border border-white/10 bg-[rgba(10,10,12,0.78)] px-3.5 backdrop-blur-2xl sm:left-[148px]">
-          <h1 class="truncate text-[13.5px] font-medium">{{ s.target_name }}</h1>
-          <span class="hidden truncate font-mono text-[10px] uppercase tracking-[0.12em] text-white/40 sm:inline"># {{ s.keyword }}</span>
-          <span class="hidden h-4 w-px bg-white/10 md:block"></span>
-          <span class="hidden whitespace-nowrap font-mono text-[10.5px] text-white/55 md:inline">{{ top3(s) }}% top 3 · avg {{ avg(s) }}</span>
-          <a [href]="geogridUrl(s.id)" target="_blank" rel="noopener" class="whitespace-nowrap font-mono text-[10.5px] text-white/45 transition hover:text-accent">Full scan &#8599;</a>
+        <div class="pointer-events-none absolute left-4 top-[68px] z-10 max-w-[320px] sm:left-6">
+          <p class="eyebrow">{{ s.keyword }}</p>
+          <h1 class="display mt-1 text-[28px] drop-shadow-[0_2px_14px_rgba(0,0,0,0.7)]">{{ s.target_name }}</h1>
+          <p class="mt-1.5 font-mono text-[10.5px] tracking-[0.04em] text-white/55 drop-shadow-[0_1px_6px_rgba(0,0,0,0.8)]">{{ s.grid_data.length }} points · {{ top3(s) }}% top 3 · avg {{ avg(s) }}</p>
+          <a [href]="geogridUrl(s.id)" target="_blank" rel="noopener" class="pointer-events-auto mt-2 inline-flex h-6 items-center gap-1 rounded-md border border-white/10 bg-[rgba(10,10,12,0.7)] px-2 font-mono text-[10px] uppercase tracking-[0.1em] text-white/60 backdrop-blur-xl transition hover:border-accent/40 hover:text-accent">Full scan &#8599;</a>
         </div>
 
         @if (active(); as a) {
@@ -62,7 +61,7 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
           </aside>
         }
 
-        <div class="absolute left-4 top-[72px] z-10 flex w-[42px] flex-col items-center rounded-xl border border-white/10 bg-[rgba(10,10,12,0.78)] py-1 backdrop-blur-2xl sm:left-6">
+        <div class="absolute left-4 top-[186px] z-10 flex w-[42px] flex-col items-center rounded-xl border border-white/10 bg-[rgba(10,10,12,0.78)] py-1 backdrop-blur-2xl sm:left-6">
           <button type="button" class="rail-btn" aria-label="Zoom in" data-tip="Zoom in" (click)="map.engine()?.zoom(0.7)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg></button>
           <button type="button" class="rail-btn" aria-label="Zoom out" data-tip="Zoom out" (click)="map.engine()?.zoom(1.4)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 12h14" /></svg></button>
           <button type="button" class="rail-btn" aria-label="Recenter" data-tip="Recenter" (click)="map.engine()?.recenter()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM12 2v4M12 18v4M2 12h4M18 12h4" /></svg></button>
@@ -73,7 +72,7 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
         </div>
 
         @if (menu() === 'time') {
-          <div class="popover top-[176px]">
+          <div class="popover top-[329px]">
             <p class="eyebrow mb-1.5 px-2">Time</p>
             @for (t of times; track t.id) {
               <button type="button" class="pop-row" [class.pop-on]="time() === t.id" (click)="time.set(t.id)">{{ t.label }}</button>
@@ -81,7 +80,7 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
           </div>
         }
         @if (menu() === 'settings') {
-          <div class="popover top-[210px]">
+          <div class="popover top-[363px]">
             <p class="eyebrow mb-1.5 px-2">Settings</p>
             <button type="button" class="pop-row" (click)="scanColors.set(!scanColors())">Building colors <span class="switch" [class.switch-on]="scanColors()"></span></button>
             <button type="button" class="pop-row" (click)="flip('shadows')">Shadows <span class="switch" [class.switch-on]="shadows()"></span></button>
