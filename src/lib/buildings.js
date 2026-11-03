@@ -77,3 +77,12 @@ export async function loadTile(x, y) {
     ],
   };
 }
+
+export function tileAt(lng, lat) {
+  return { x: Math.floor(lng2x(lng)), y: Math.floor(lat2y(lat)) };
+}
+
+export function tileDistance(x, y, lng, lat) {
+  const tileMeters = (40075016 * Math.cos((lat * Math.PI) / 180)) / N;
+  return Math.hypot(x + 0.5 - lng2x(lng), y + 0.5 - lat2y(lat)) * tileMeters;
+}

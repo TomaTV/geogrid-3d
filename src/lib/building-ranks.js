@@ -49,7 +49,7 @@ function centroid(ring) {
 export function makeEstimator(nodes, step) {
   const lat0 = nodes[0].lat;
   const pts = nodes.map((n) => project(n.lat, n.lng, lat0));
-  const sigma = step * 0.75;
+  const sigma = step * 1.1;
   return function estimate(lat, lng) {
     const [px, py] = project(lat, lng, lat0);
     let nearest = [Infinity, 0];

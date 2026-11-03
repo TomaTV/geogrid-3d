@@ -121,7 +121,7 @@ export function tileLayers(key) {
         'fill-extrusion-color': ['get', 'color'],
         'fill-extrusion-height': ['get', 'height'],
         'fill-extrusion-base': ['get', 'base'],
-        'fill-extrusion-opacity': 0.95,
+        'fill-extrusion-opacity': 1,
       },
     },
   ];
