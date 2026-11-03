@@ -4,6 +4,7 @@ import { createDeck, tileDeckLayers } from './deck-layers.js';
 import { gridStep, makeEstimator, rankBuildings, scanBounds } from './building-ranks.js';
 import { loadTile, tileAt, tileDistance, tileKey } from './buildings.js';
 import { growTrees } from './trees.js';
+import { heatImage } from './heat-field.js';
 import { rankColor } from './rank-colors.js';
 
 maplibregl.setWorkerUrl(new URL('maplibre/maplibre-gl-worker.mjs', document.baseURI).href);
@@ -289,6 +290,13 @@ export function createScanMap(container, scan, { onNodeSelect, onReady, onError 
 
   map.once('load', () => {
     for (const id of Object.values(IDS)) map.addSource(id, { type: 'geojson', data: EMPTY });
+    const heatBounds = scanBounds(nodes, step * 1.5);
+    map.addSource('heat', {
+      type: 'image',
+      url: heatImage(heatBounds, estimate),
+      coordinates: [[heatBounds.west, heatBounds.north], [heatBounds.east, heatBounds.north], [heatBounds.east, heatBounds.south], [heatBounds.west, heatBounds.south]],
+    });
+    map.addLayer({ id: 'heat', type: 'raster', source: 'heat', paint: { 'raster-opacity': 0.9, 'raster-fade-duration': 0, 'raster-resampling': 'linear' } }, 'roads-minor');
     for (const l of overlayLayers()) map.addLayer(l);
     map.getSource(IDS.ring).setData({ type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'Point', coordinates: center }, properties: {} }] });
     map.getSource(IDS.nodes).setData({

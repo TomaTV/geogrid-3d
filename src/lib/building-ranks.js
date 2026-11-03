@@ -1,7 +1,7 @@
 import { nodeRgb, rgbHex } from './rank-colors.js';
 
 const R = 6371000;
-const OUTSIDE = [43, 50, 60];
+const OUTSIDE = [74, 84, 98];
 const RANK_CAP = 25;
 
 function project(lat, lng, lat0) {

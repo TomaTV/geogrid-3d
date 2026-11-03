@@ -7,7 +7,7 @@ import { CylinderGeometry, SphereGeometry } from '@luma.gl/engine';
 const SPHERE = new SphereGeometry({ radius: 1, nlat: 10, nlong: 12 });
 const TRUNK = new CylinderGeometry({ radius: 0.35, height: 1, nradial: 6, verticalAxis: 'z' });
 
-const BUILDING_MATERIAL = { ambient: 0.55, diffuse: 0.75, shininess: 18, specularColor: [70, 74, 82] };
+const BUILDING_MATERIAL = { ambient: 0.5, diffuse: 0.95, shininess: 24, specularColor: [90, 96, 110] };
 const TREE_MATERIAL = { ambient: 0.6, diffuse: 0.7, shininess: 6, specularColor: [20, 30, 20] };
 
 function hexRgb(hex) {
@@ -21,8 +21,8 @@ function leaf(tone) {
 }
 
 export function createDeck() {
-  const ambient = new AmbientLight({ color: [186, 200, 235], intensity: 0.55 });
-  const sun = new DirectionalLight({ color: [255, 224, 188], intensity: 1.7, direction: [0.6, 0.5, -0.65], _shadow: false });
+  const ambient = new AmbientLight({ color: [200, 212, 240], intensity: 0.75 });
+  const sun = new DirectionalLight({ color: [255, 224, 188], intensity: 2.1, direction: [0.7, 0.45, -0.6], _shadow: false });
   const lighting = new LightingEffect({ ambient, sun });
   lighting.shadowColor = [0, 0, 0, 0.55];
   return new MapboxOverlay({ interleaved: false, layers: [], effects: [lighting] });
