@@ -23,11 +23,14 @@ export interface Scan {
   saved_at: string;
 }
 
+export type GridSize = 5 | 7 | 13 | 21;
+
 export interface ScanRequest {
   address: string;
   keyword: string;
   business: string;
-  grid: 5 | 7;
+  grid: GridSize;
+  radius: number;
   note: string;
 }
 

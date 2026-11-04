@@ -1,7 +1,8 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { ScanRequest } from '../data/scan';
+import { GridSize, ScanRequest } from '../data/scan';
 import { ScanSource } from '../data/scan-source';
 import { ScanStore } from '../data/scan-store';
 
@@ -77,12 +78,40 @@ type Field = 'address' | 'keyword' | 'business' | 'note';
               </div>
             }
             @case (3) {
-              <div>
-                <span class="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">Grid</span>
-                <div class="flex gap-2">
-                  @for (g of grids; track g) {
-                    <button type="button" class="btn flex-1" [class.btn-primary]="form.value.grid === g" (click)="form.controls.grid.setValue(g)">{{ g }}x{{ g }} <span class="font-mono text-[10px] opacity-60">{{ g * g }} points</span></button>
-                  }
+              <div class="grid gap-5 md:grid-cols-[1fr_190px]">
+                <div class="space-y-5">
+                  <div>
+                    <span class="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">Grid size</span>
+                    <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      @for (g of grids; track g.size) {
+                        <button type="button" class="cursor-pointer rounded-lg border p-3 text-left transition-colors"
+                                [class.border-accent/40]="form.value.grid === g.size" [class.bg-accent/[0.06]]="form.value.grid === g.size"
+                                [class.border-white/[0.08]]="form.value.grid !== g.size" [class.bg-white/[0.02]]="form.value.grid !== g.size"
+                                [attr.aria-pressed]="form.value.grid === g.size" (click)="form.controls.grid.setValue(g.size)">
+                          <span class="block text-[13px] font-medium">{{ g.label }}</span>
+                          <span class="mt-0.5 block font-mono text-[10px] text-white/40">{{ g.size }}x{{ g.size }} · {{ g.size * g.size }} pts</span>
+                        </button>
+                      }
+                    </div>
+                  </div>
+                  <div>
+                    <span class="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">Radius</span>
+                    <div class="flex h-9 gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] p-0.5">
+                      @for (r of radii; track r) {
+                        <button type="button" class="flex-1 cursor-pointer rounded-md text-[11px] font-medium transition-colors"
+                                [class.bg-white/[0.08]]="form.value.radius === r" [class.text-white/80]="form.value.radius === r" [class.text-white/30]="form.value.radius !== r"
+                                [attr.aria-pressed]="form.value.radius === r" (click)="form.controls.radius.setValue(r)">{{ r / 1000 }}km</button>
+                      }
+                    </div>
+                  </div>
+                </div>
+                <div class="hidden md:block">
+                  <span class="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">Preview</span>
+                  <div class="grid aspect-square gap-[3px] rounded-lg border border-white/[0.08] bg-white/[0.02] p-3" [style.grid-template-columns]="'repeat(' + previewSize() + ', 1fr)'">
+                    @for (dot of previewDots(); track $index) {
+                      <span class="place-self-center rounded-full" [class.bg-accent]="dot" [class.bg-white/25]="!dot" [style.width.px]="previewDot()" [style.height.px]="previewDot()"></span>
+                    }
+                  </div>
                 </div>
               </div>
               <div>
@@ -99,6 +128,7 @@ type Field = 'address' | 'keyword' | 'business' | 'note';
                   <div class="flex justify-between gap-4"><dt class="text-white/40">Address</dt><dd class="truncate text-right">{{ form.value.address }}</dd></div>
                   <div class="flex justify-between gap-4"><dt class="text-white/40">Keyword</dt><dd class="truncate text-right">{{ form.value.keyword }}</dd></div>
                   <div class="flex justify-between gap-4"><dt class="text-white/40">Business</dt><dd class="truncate text-right">{{ form.value.business }}</dd></div>
+                  <div class="flex justify-between gap-4"><dt class="text-white/40">Grid</dt><dd class="font-mono">{{ form.value.grid }}x{{ form.value.grid }} · {{ (form.value.radius ?? 0) / 1000 }} km</dd></div>
                   <div class="flex justify-between gap-4"><dt class="text-white/40">Credits</dt><dd class="font-mono">{{ source.mode === 'mock' ? '0 (mock)' : credits() }}</dd></div>
                 </dl>
               </div>
@@ -132,13 +162,20 @@ export class ScanNew {
     { num: 2, label: 'Business' },
     { num: 3, label: 'Grid config' },
   ];
-  grids: (5 | 7)[] = [5, 7];
+  grids: { size: GridSize; label: string }[] = [
+    { size: 5, label: 'Quick' },
+    { size: 7, label: 'Standard' },
+    { size: 13, label: 'Precise' },
+    { size: 21, label: 'Max' },
+  ];
+  radii = [1000, 3000, 5000, 10000, 20000];
 
   form = this.fb.nonNullable.group({
     address: ['', [Validators.required, Validators.minLength(5)]],
     keyword: ['', Validators.required],
     business: ['', Validators.required],
-    grid: [5 as 5 | 7, Validators.required],
+    grid: [5 as GridSize, Validators.required],
+    radius: [3000, Validators.required],
     note: ['', Validators.maxLength(200)],
   });
 
@@ -147,7 +184,15 @@ export class ScanNew {
   progress = signal(0);
   label = signal('');
   error = signal<string | null>(null);
-  credits = computed(() => (this.form.value.grid === 7 ? 49 : 25));
+  grid = toSignal(this.form.controls.grid.valueChanges, { initialValue: this.form.controls.grid.value });
+  credits = computed(() => this.grid() * this.grid());
+  previewSize = computed(() => Math.min(this.grid(), 13));
+  previewDot = computed(() => (this.previewSize() > 7 ? 4 : 7));
+  previewDots = computed(() => {
+    const n = this.previewSize();
+    const c = (n - 1) / 2;
+    return Array.from({ length: n * n }, (_, i) => i % n === c && Math.floor(i / n) === c);
+  });
 
   private stepFields: Record<number, Field[]> = { 1: ['address', 'keyword'], 2: ['business'], 3: ['note'] };
 

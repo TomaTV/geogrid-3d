@@ -17,7 +17,7 @@ export class ScanSource {
   }
 
   private async runMock(req: ScanRequest, progress: Progress): Promise<Scan> {
-    const fixture = await firstValueFrom(this.http.get<{ data: Scan }>('mock/scan-wsf-13.json'));
+    const fixture = await firstValueFrom(this.http.get<{ data: Scan }>('mock/scan-demo-21.json'));
     const steps = ['Locating the address', 'Querying Google Maps', 'Ranking each point', 'Building the 3D view'];
     for (let i = 0; i < steps.length; i++) {
       progress((i + 0.5) / steps.length, steps[i]);
@@ -40,12 +40,12 @@ export class ScanSource {
       target_name: req.business,
       latitude: Number(geo[0].lat),
       longitude: Number(geo[0].lon),
-      radius_meters: 3000,
+      radius_meters: req.radius,
       grid_size: req.grid,
     };
     const start = await firstValueFrom(this.http.post<{ id: string }>('/live/scans', body));
     const total = req.grid * req.grid;
-    for (let i = 0; i < 80; i++) {
+    for (let i = 0; i < 160; i++) {
       await wait(2500);
       const r = await firstValueFrom(this.http.get<{ data: Scan & { nodes_sampled?: number } }>('/live/scans/' + start.id));
       const s = r.data;

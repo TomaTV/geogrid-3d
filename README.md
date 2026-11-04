@@ -1,10 +1,28 @@
 # Geogrid 3D
 
+![Scan affiché dans la ville en 3D, les immeubles en vert sont bien classés, ceux en gris sont absents du top 20](docs/hero.png)
+
 Projet d'école réalisé pour le cours Angular de l'IIM.
 
 [Geogrid](https://geogrid.dev) mesure la position d'un commerce sur Google Maps, point par point, sur une grille géographique. Geogrid 3D affiche ce résultat dans une ville en 3D : on se déplace dans les rues, on clique sur un immeuble, et le classement estimé à cet endroit s'affiche.
 
 Le rang est mesuré aux points du scan, pas à chaque immeuble. Entre deux points, la couleur et le rang affichés sont une estimation.
+
+## En images
+
+Le scan de démonstration est un vrai scan Geogrid en 21x21 sur un rayon de 5 km autour de Boulogne-Billancourt, pour le mot-clé « pizzeria ». Les couleurs reprennent la palette de Geogrid, et l'écart entre le vert et le gris se lit directement dans la ville.
+
+Un clic sur un immeuble affiche le rang estimé à cet endroit, le point mesuré le plus proche, la distance au commerce et les meilleurs résultats.
+
+![Panneau affiché au clic sur un immeuble, avec le rang estimé et les meilleurs résultats](docs/clic.png)
+
+La collection garde les scans sauvegardés, avec leur rang moyen et la répartition de leurs rangs.
+
+![Page de la collection](docs/collection.png)
+
+L'assistant crée un scan en 3 étapes : adresse, commerce, puis taille de grille et rayon.
+
+![Troisième étape de l'assistant de scan](docs/wizard.png)
 
 ## Fonctionnalités
 
@@ -13,7 +31,7 @@ Le rang est mesuré aux points du scan, pas à chaque immeuble. Entre deux point
 - **Building colors** : colore les immeubles selon le rang, avec la palette de Geogrid.
 - **Clic sur un immeuble** : rang estimé, point mesuré le plus proche, distance au commerce et meilleurs résultats à ce point.
 - **Collection** : les scans sont sauvegardés, modifiables (note, tag) et supprimables.
-- **Assistant de scan** : formulaire réactif en 3 étapes avec validation.
+- **Assistant de scan** : formulaire réactif en 3 étapes avec validation, grilles de 5x5 à 21x21, rayon de 1 à 20 km.
 
 ## Prérequis
 
@@ -98,6 +116,7 @@ Données cartographiques : © [OpenMapTiles](https://www.openmaptiles.org/), © 
 ## Limites connues
 
 - La création de scan depuis l'assistant et le mode live n'ont pas encore été testés de bout en bout.
-- Le scan d'exemple est partiel (44 points) : les couleurs sont moins riches qu'avec un scan complet.
+- Le scan d'exemple a le statut partiel : 421 points mesurés sur 441.
+- En mode mock, l'assistant renvoie toujours le scan d'exemple : l'adresse, la grille et le rayon choisis n'ont pas d'effet sur le résultat.
 - Les hauteurs absentes d'OpenStreetMap sont estimées d'après la taille au sol du bâtiment.
 - Sur une machine modeste, activer **Low power** dans Settings.

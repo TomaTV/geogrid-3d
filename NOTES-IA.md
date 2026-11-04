@@ -1,8 +1,8 @@
 # Notes de passation : Geogrid 3D
 
-Projet d'école (cours Angular, IIM). Décision de Thomas du 2026-11-03 : **pas d'intégration dans le vrai Geogrid**, c'est un projet d'école seulement. Dépôt : branche `3dmap`, dossier `3d/`. Un repo public séparé `TomaTV/geogrid-3d` (contenu de `3d/` seulement, zéro secret, README français avec logo, bannière et captures) reste à créer, à la demande de Thomas. Brief d'origine : `../3DMAP-GEOGRID.md`. Idées futures : `IDEES-3D.md`.
+Projet d'école (cours Angular, IIM). Décision de Thomas du 2026-11-03 : **pas d'intégration dans le vrai Geogrid**, c'est un projet d'école seulement. Dépôt : branche `3dmap`, dossier `3d/`. Repo public séparé : `TomaTV/geogrid-3d` (contenu de `3d/` seulement, zéro secret). Brief d'origine : `../3DMAP-GEOGRID.md`. Idées futures : `IDEES-3D.md`.
 
-Ne rien modifier du produit Geogrid. Seule exception : `3d/**` dans les ignores de `eslint.config.mjs`. Commits sans demander le message mais par lot logique, pas un par micro-réglage. Push seulement sur accord. Rien de poussé pour le moment (43 commits sur `3dmap`) ; regrouper l'historique avant le repo public seulement si Thomas le demande.
+Ne rien modifier du produit Geogrid. Seule exception : `3d/**` dans les ignores de `eslint.config.mjs`. Commits sans demander le message mais par lot logique, pas un par micro-réglage. Push seulement sur accord. 
 
 ## Lancer
 
@@ -42,10 +42,10 @@ Apparition : les immeubles et les arbres poussent en vague depuis le centre du s
 
 ## Données
 
-- Fixture : `public/mock/scan-wsf-13.json`, scan réel de Web School Factory, statut `partial`, 44 nœuds dispersés. `scan-wsf-7.json` : scan 7x7 complet de secours.
+- Fixture : `public/mock/scan-demo-21.json`, scan réel 21x21 (id `baf01975-faaa-441b-a0e7-38ed8495bc49`), « pizzeria », Casa'Mia à Boulogne-Billancourt, rayon 5 km, statut `partial`, 421 nœuds. Rangs : 75 en top 3, 51 en 4-10, 295 absents du top 20. Le sud du scan (rangs 6 à 9) sort du cadre de la vue par défaut.
 - `scan.latitude/longitude` = centre demandé. Position du commerce = `grid_data[n].self.lat/lng` (fiche Google trouvée), différente du centre.
 - Rang `null` = non mesuré, rang 101 = absent du top 20. Ne pas confondre.
-- Les mots-clés génériques donnent le même résultat sur 3 km : mauvais pour une démo.
+- Dans Paris, les résultats sont quasi identiques d'un point à l'autre (sondes du 2026-11-04 : salon de thé, librairie, pâtisserie). Ils changent en passant d'une commune à l'autre : une démo variée doit couvrir plusieurs communes. Viser le commerce par `target_cid`, le nom seul peut ne rien trouver.
 - Sous Git Bash, `curl -d` avec un accent envoie un caractère invalide : passer par `--data-binary @fichier.json`.
 
 ## Secret
@@ -69,11 +69,10 @@ Dans `src/lib/engine/sky.js`, chaque preset porte :
 
 ## À faire (reprise : mercredi 2026-11-04 après-midi)
 
-1. Wizard : ajouter à l'étape 3 ce qui manque par rapport à Geogrid (taille de grille, rayon, résumé), demandé par Thomas.
-2. README : le texte est fait, reste logo, bannière, captures 390 px et desktop.
-3. Repo public `TomaTV/geogrid-3d` : contenu de `3d/` seulement, push sur accord de Thomas.
-4. Tester de bout en bout : création de scan depuis le wizard, collection, mode live.
-5. Vérifier en mobile 390 px avec le nouveau moteur.
+1. Tests de bout en bout : création de scan depuis le wizard, collection, puis mode live. Prévus par Thomas plus tard.
+2. Déploiement Vercel sur `3d.geogrid.dev`, fait par Thomas : json-server et le proxy de clé ne tournent pas sur un site statique, la collection affichera son erreur tant que ce n'est pas réglé.
+
+Décisions de Thomas : pas de mobile, pas de comparaison de scans. Pas de test headless sans demande : ça fait chauffer son PC. Pour publier une mise à jour : `git subtree split --prefix=3d`, puis push du résultat sur `main` de `TomaTV/geogrid-3d`.
 
 ## À vérifier ou à améliorer
 
@@ -82,5 +81,5 @@ Dans `src/lib/engine/sky.js`, chaque preset porte :
 - Night peut être trop sombre : fenêtres peu visibles sur la dernière capture.
 - La bascule ombres / sans ombres au dézoom peut se remarquer.
 - Tour Eiffel jugée un peu cheap par Thomas, acceptée.
-- Un scan complet avec un mot-clé local donnerait des couleurs plus riches que la fixture partielle.
+- Day avec une vue dézoomée : bande sombre à l'horizon, probablement le plan `land` (sombre) vu au-delà des tuiles avant que le brouillard ne le couvre. Pas corrigé.
 - Pas d'occlusion ambiante en post-traitement. `GTAOPass` possible si le GPU suit.
