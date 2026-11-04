@@ -75,7 +75,12 @@ function polygonsOf(feature, E) {
     const clipped = clipRing(oriented, E);
     if (Math.sign(a) === s0) {
       cur = clipped.length >= 3 ? [clipped] : null;
-      if (cur) polys.push(cur);
+      if (cur) {
+        // Empreinte avant découpe à la tuile : un immeuble à cheval sur deux tuiles reçoit la même estimation des deux côtés.
+        cur.rawArea = Math.abs(a);
+        cur.rawMin = r.reduce((m, p) => (p[0] < m[0] || (p[0] === m[0] && p[1] < m[1]) ? p : m), r[0]);
+        polys.push(cur);
+      }
     } else if (cur && clipped.length >= 3) {
       cur.push(clipped);
     }
@@ -297,11 +302,12 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster) {
     for (const poly of polygonsOf(f, E)) {
       const outer = poly[0];
       const area = Math.abs(ringArea(outer)) * unit * unit;
-      if (area < (simple ? 70 : 18)) continue;
+      const fullArea = poly.rawArea * unit * unit;
+      if (fullArea < (simple ? 70 : 18)) continue;
       let h = top;
-      const r0 = hash(Math.round(outer[0][0]), Math.round(outer[0][1]));
+      const r0 = hash(Math.round((ox + poly.rawMin[0] * unit) / 4), Math.round((oz + poly.rawMin[1] * unit) / 4));
       // Hauteur absente dans OSM : estimée depuis l'empreinte seule. Une valeur par tuile créait des zones carrées visibles.
-      if (h <= 6 && base === 0 && area > 55) h = Math.min(5 + Math.sqrt(area) * 0.6, 22) * (0.85 + r0 * 0.3);
+      if (h <= 6 && base === 0 && fullArea > 55) h = Math.min(5 + Math.sqrt(fullArea) * 0.6, 22) * (0.85 + r0 * 0.3);
       if (h <= base) continue;
       raster.fill(outer, 1);
 

@@ -201,6 +201,7 @@ export function createMaterials(field) {
     uTime: { value: 0 },
     uFocus: { value: new THREE.Vector2() },
     uFocusR: { value: 5000 },
+    uPixel: { value: 0.0005 },
   };
 
   const buildingParts = {
@@ -238,7 +239,7 @@ export function createMaterials(field) {
           float sBay = fract(vWall.x / 6.5);
           gShopRnd = hash21(vec2(floor(vWall.x / 6.5), seed * 17.0));
           float isShop = step(0.25, gShopRnd) * sFade;
-          gShop = isShop * smoothstep(0.03, 0.05, sBay) * smoothstep(0.97, 0.95, sBay) * step(0.5, vWall.y) * step(vWall.y, 2.85) * step(0.05, fract(sBay * 3.0));
+          gShop = isShop * smoothstep(0.03, 0.05, sBay) * smoothstep(0.97, 0.95, sBay) * step(0.5, vWall.y) * step(vWall.y, 2.85) * mix(1.0, step(0.05, fract(sBay * 3.0)), 1.0 - smoothstep(0.02, 0.06, fwidth(vWall.y)));
           facade = mix(facade, vec3(0.035, 0.045, 0.055), gShop);
           vec3 awning = 0.2 + 0.32 * cos(6.283 * (gShopRnd * 3.0 + vec3(0.0, 0.33, 0.67)));
           facade = mix(facade, awning, isShop * step(2.98, vWall.y) * step(vWall.y, 3.5));
@@ -246,7 +247,8 @@ export function createMaterials(field) {
           float pane = tex.a * upper;
           gWin = pane * gDetail;
           vec3 skyGrey = mix(vec3(dot(uSky, vec3(0.33))), uSky, 0.45);
-          vec3 glass = mix(vec3(0.05, 0.065, 0.085), skyGrey * 0.42, 0.25 + 0.5 * fract(c.y)) * (0.75 + 0.4 * hash21(floor(c) + seed * 37.0));
+          // Reflets propres à chaque fenêtre seulement quand elle couvre assez de pixels, sinon leur moyenne : pas de grésillement au loin.
+          vec3 glass = mix(vec3(0.05, 0.065, 0.085), skyGrey * 0.42, mix(0.5, 0.25 + 0.5 * fract(c.y), gDetail)) * mix(0.95, 0.75 + 0.4 * hash21(floor(c) + seed * 37.0), gDetail);
           glass = mix(glass, skyGrey * 0.7, tower * 0.45);
           diffuseColor.rgb = mix(diffuseColor.rgb, mix(glass, vec3(0.025, 0.03, 0.04), smoothstep(0.3, 0.8, uNight)), pane);
         } else {
@@ -331,7 +333,8 @@ export function createMaterials(field) {
     fragmentShader: 'varying float vA; void main() { gl_FragColor = vec4(0.0, 0.0, 0.0, vA * 0.42); }',
   });
   // Pré-passe : la profondeur d'abord, pour que le matériau des façades ne colore que les pixels visibles.
-  const buildingPre = new THREE.MeshBasicMaterial({ colorWrite: false });
+  // Profondeur poussée d'un cran : la passe principale, compilée à part, ne peut plus échouer au test d'égalité (points de ciel sur les façades).
+  const buildingPre = new THREE.MeshBasicMaterial({ colorWrite: false, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
   buildingPre.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
@@ -376,7 +379,7 @@ export function createMaterials(field) {
           if (W >= 9.0) paint = max(paint, step(0.5, fract(vRoad.y / 6.0)) * (1.0 - smoothstep(0.08, 0.11 + aaX, abs(xm - halfW * 0.5))));
           paint *= clear;
           if (W >= 4.5 && W <= 12.0 && ends < 7.0) {
-            paint = max(paint, step(0.5, fract(xm / 1.1)) * step(2.5, ends) * step(xm, halfW - 0.2));
+            paint = max(paint, mix(0.5, step(0.5, fract(xm / 1.1)), 1.0 - smoothstep(0.1, 0.3, aaX)) * step(2.5, ends) * step(xm, halfW - 0.2));
             paint = max(paint, (1.0 - smoothstep(0.0, 0.5, abs(ends - 1.7))) * step(xm, halfW - 0.2));
           }
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.72, 0.72, 0.7), paint * paintFade * (1.0 - smoothstep(0.5, 2.0, aaY)));
@@ -397,7 +400,9 @@ export function createMaterials(field) {
             vec3 tone = side > 0.0 ? vec3(1.0, 0.9, 0.75) : vec3(1.0, 0.12, 0.08);
             // De près les voitures sont en 3D : ces traînées ne servent que de loin.
             float farOnly = smoothstep(0.35, 0.9, fwidth(vRoad.y));
-            totalEmissiveRadiance += tone * smoothstep(0.05, 0.0, abs(flow - 0.5)) * lane * visible * farOnly * uNight * 3.5;
+            // Traînée élargie à au moins un pixel, intensité réduite d'autant : même lumière moyenne, sans clignoter.
+            float fw = max(0.05, fwidth(vRoad.y) / 38.0 * 1.5);
+            totalEmissiveRadiance += tone * smoothstep(fw, 0.0, abs(flow - 0.5)) * (0.05 / fw) * lane * visible * farOnly * uNight * 3.5;
           }
           float lampLine = vRoad.z > 0.0 ? W * 0.5 + 1.0 : W * 0.46;
           vec2 pool = vec2((fract(vRoad.y / 27.0) - 0.5) * 27.0 / 6.0, (abs(vRoad.x) * W * 0.5 - lampLine) / 4.0);
@@ -414,7 +419,7 @@ export function createMaterials(field) {
       color: roadParts.color + `
         if (vRoad.z < 0.0) {
           vec3 stone = vec3(0.47, 0.45, 0.41) * (0.8 + 0.4 * fbm2(vW.xz * 0.25 + vW.y * 0.25));
-          diffuseColor.rgb = stone * (1.0 - 0.14 * step(0.92, fract(vW.y / 0.8)));
+          diffuseColor.rgb = stone * (1.0 - 0.14 * step(0.92, fract(vW.y / 0.8)) * (1.0 - smoothstep(0.03, 0.08, fwidth(vW.y))));
         }
       `,
       emissive: roadParts.emissive.replace('if (W > 3.0 && uNight > 0.0)', 'if (false)').replace('uScanRoad * (vRoad.z < 0.0 ? 0.5 : 0.04)', 'uScanRoad * 0.0'),
@@ -587,11 +592,17 @@ export function createMaterials(field) {
     {
       uniforms,
       warp: false,
-      vertexHead: 'attribute vec4 aLamp; attribute float aPart; varying float vPart;',
+      vertexHead: 'attribute vec4 aLamp; attribute float aPart; varying float vPart; uniform float uPixel;',
       normalBody: 'objectNormal = vec3(objectNormal.x * aLamp.z - objectNormal.z * aLamp.w, objectNormal.y, objectNormal.x * aLamp.w + objectNormal.z * aLamp.z);',
+      // Au loin, le mât plus fin qu'un pixel scintillait : il disparaît, la lanterne garde au moins deux pixels.
       vertexBody: /* glsl */ `
         vPart = aPart;
-        transformed = vec3(position.x * aLamp.z - position.z * aLamp.w + aLamp.x, position.y, position.x * aLamp.w + position.z * aLamp.z + aLamp.y);
+        vec2 lw = (modelMatrix * vec4(aLamp.x, 0.0, aLamp.y, 1.0)).xz;
+        float ld = distance(vec3(lw.x, 6.0, lw.y), cameraPosition);
+        vec3 lp = position;
+        if (aPart > 0.5) lp = (lp - vec3(1.6, 7.42, 0.0)) * clamp(ld * uPixel * 2.0 / 0.4, 1.0, 3.0) + vec3(1.6, 7.42, 0.0);
+        else if (ld > 380.0 + 220.0 * fract(sin(dot(lw, vec2(12.9898, 78.233))) * 43758.5453)) lp = vec3(0.0);
+        transformed = vec3(lp.x * aLamp.z - lp.z * aLamp.w + aLamp.x, lp.y, lp.x * aLamp.w + lp.z * aLamp.z + aLamp.y);
       `,
       fragmentHead: 'varying float vPart;',
       color: 'diffuseColor.rgb = vec3(0.17, 0.18, 0.19);',

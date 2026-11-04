@@ -483,7 +483,7 @@ export function createScanMap(container, scan, options) {
       if (e.preMesh) e.preMesh.visible = edge < 600;
       if (e.skirtMesh) e.skirtMesh.visible = extrasOn && edge < 1100;
       if (e.carMesh) e.carMesh.visible = extrasOn && low && edge < 900;
-      if (e.lampMesh) e.lampMesh.visible = extrasOn && low && edge < 800;
+      if (e.lampMesh) e.lampMesh.visible = extrasOn && low && edge < 950;
       if (!e.treeMesh) continue;
       const useNear = d < 900;
       const geo = useNear ? e.treeNear : e.treeFar;
@@ -936,11 +936,14 @@ export function createScanMap(container, scan, options) {
   });
   resize.observe(container);
 
+  const UP = new THREE.Vector3(0, 1, 0);
+  const shadowX = new THREE.Vector3();
+  const shadowY = new THREE.Vector3();
   function updateShadow(moving) {
     const t = controls.target;
     const camDist = camera.position.distanceTo(t);
     // La boîte d'ombre couvre le cercle chargé (pas de bord carré visible) ; au dézoom les ombres s'effacent, la carte n'a plus la résolution.
-    const S = Math.min(focusRadius(camDist) * 1.02, 4600);
+    const S = Math.ceil(Math.min(focusRadius(camDist) * 1.02, 4600) / 200) * 200;
     sun.shadow.intensity = 1 - THREE.MathUtils.smoothstep(camDist, 1900, 3200);
     const c = sun.shadow.camera;
     if (sun.shadow.intensity <= 0) return;
@@ -955,8 +958,15 @@ export function createScanMap(container, scan, options) {
     c.near = 10;
     c.far = 9000;
     c.updateProjectionMatrix();
-    sun.target.position.set(t.x, 0, t.z);
-    sun.position.copy(sun.userData.dir).multiplyScalar(4500).add(sun.target.position);
+    // Centre calé sur la grille des texels de la carte d'ombre : d'un recalcul à l'autre, les bords d'ombre ne tremblent plus.
+    const texel = (2 * S) / sun.shadow.mapSize.x;
+    const dir = sun.userData.dir;
+    shadowX.crossVectors(UP, dir).normalize();
+    shadowY.crossVectors(dir, shadowX);
+    const a = t.x * shadowX.x + t.z * shadowX.z;
+    const b = t.x * shadowY.x + t.z * shadowY.z;
+    sun.target.position.set(t.x, 0, t.z).addScaledVector(shadowX, Math.round(a / texel) * texel - a).addScaledVector(shadowY, Math.round(b / texel) * texel - b);
+    sun.position.copy(dir).multiplyScalar(4500).add(sun.target.position);
     sun.target.updateMatrixWorld();
     sun.updateMatrixWorld();
     renderer.shadowMap.needsUpdate = true;
@@ -1078,6 +1088,7 @@ export function createScanMap(container, scan, options) {
     scene.fog.density = (fogBase * FOG_SCALE) / Math.max(1, dist / 1500);
     mats.uniforms.uFocus.value.lerp(focusTo.set(controls.target.x, controls.target.z), 0.04);
     mats.uniforms.uFocusR.value += (focusRadius(dist) - mats.uniforms.uFocusR.value) * 0.04;
+    mats.uniforms.uPixel.value = (2 * Math.tan((camera.fov * Math.PI) / 360)) / (container.clientHeight * dpr || 1);
 
     if (now > refreshAt) {
       refreshAt = now + 0.4;
