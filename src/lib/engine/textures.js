@@ -164,11 +164,11 @@ function paving(g) {
 }
 
 function grass(g) {
-  rect(g, '#88a662', 0, 0, SIZE, SIZE);
-  const tones = ['rgba(45,75,30,0.42)', 'rgba(185,205,110,0.34)', 'rgba(35,65,25,0.36)', 'rgba(150,180,85,0.3)'];
-  for (let i = 0; i < 5200; i++) {
-    g.fillStyle = tones[i % 4];
-    g.fillRect(hash(i, 11) * SIZE, hash(i, 12) * SIZE, 1 + hash(i, 13) * 2, 3 + hash(i, 14) * 7);
+  rect(g, '#8aa56a', 0, 0, SIZE, SIZE);
+  const tones = ['rgba(60,85,45,0.16)', 'rgba(175,190,120,0.14)'];
+  for (let i = 0; i < 9000; i++) {
+    g.fillStyle = tones[i % 2];
+    g.fillRect(hash(i, 11) * SIZE, hash(i, 12) * SIZE, 2, 2);
   }
 }
 
@@ -210,7 +210,7 @@ export function cityTextures() {
     // 0 pierre, 1 brique, 2 béton, 3 verre. Chaque couche couvre 2 travées sur 2 étages ; l'alpha porte le verre.
     facade: buildArray([stone, brick, concrete, glassTower], [10, 12, 9, 5]),
     // 0 gravier, 1 tuiles, 2 zinc, 3 bitume, 4 dalles, 5 herbe.
-    ground: buildArray([gravel, tiles, zinc, asphalt, paving, grass], [30, 12, 8, 22, 12, 26]),
+    ground: buildArray([gravel, tiles, zinc, asphalt, paving, grass], [30, 12, 8, 22, 12, 10]),
   };
   return cached;
 }

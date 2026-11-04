@@ -47,9 +47,9 @@ function part(sx, sy, sz, x, y, z, id, taper = 0) {
 
 function lampGeometry() {
   return mergeGeometries([
-    part(0.2, 6.2, 0.2, 0, 3.1, 0, 0),
-    part(1.5, 0.08, 0.1, 0.7, 6.2, 0, 0),
-    part(0.7, 0.1, 0.3, 1.35, 6.13, 0, 1),
+    part(0.26, 7.5, 0.26, 0, 3.75, 0, 0),
+    part(1.8, 0.12, 0.14, 0.85, 7.5, 0, 0),
+    part(0.9, 0.14, 0.4, 1.6, 7.42, 0, 1),
   ]);
 }
 
@@ -470,14 +470,14 @@ export function createScanMap(container, scan, options) {
     }
     for (const e of near) {
       const d = Math.hypot(e.cx - camera.position.x, e.cz - camera.position.z);
-      if (e.detailMesh) {
-        const show = extrasOn && d < 1500;
-        e.detailMesh.visible = show;
-      }
-      if (e.preMesh) e.preMesh.visible = d < 900;
-      if (e.skirtMesh) e.skirtMesh.visible = extrasOn && d < 1500;
-      if (e.carMesh) e.carMesh.visible = extrasOn && d < 1300;
-      if (e.lampMesh) e.lampMesh.visible = extrasOn && d < 800;
+      // Une tuile fait 1,6 km : on mesure jusqu'à son bord, pas jusqu'à son centre, sinon celle survolée reste masquée.
+      const edge = Math.hypot(Math.max(Math.abs(e.cx - camera.position.x) - size / 2, 0), Math.max(Math.abs(e.cz - camera.position.z) - size / 2, 0));
+      const low = camera.position.y < 1100;
+      if (e.detailMesh) e.detailMesh.visible = extrasOn && edge < 1100;
+      if (e.preMesh) e.preMesh.visible = edge < 600;
+      if (e.skirtMesh) e.skirtMesh.visible = extrasOn && edge < 1100;
+      if (e.carMesh) e.carMesh.visible = extrasOn && low && edge < 900;
+      if (e.lampMesh) e.lampMesh.visible = extrasOn && low && edge < 800;
       if (!e.treeMesh) continue;
       const useNear = d < 900;
       const geo = useNear ? e.treeNear : e.treeFar;

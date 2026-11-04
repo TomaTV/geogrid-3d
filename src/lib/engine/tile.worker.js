@@ -772,11 +772,12 @@ function placeCars(lines, E, unit) {
 // Lampadaires alignés sur les halos dessinés au sol, tous les 27 m, des deux côtés.
 function placeLamps(lines, E, unit) {
   const inst = [];
-  for (const l of lines) {
+  // Les grands axes d'abord : le plafond par tuile ne doit pas les laisser sans lampadaires.
+  for (const l of [...lines].sort((a, b) => b.width - a.width)) {
     if (l.width < 6 || !CAR_RATE[l.cls] || l.bridge) continue;
     const first = l.pts[0];
     let along = first[0] <= 8 || first[1] <= 8 || first[0] >= E - 8 || first[1] >= E - 8 ? 1000 : 0;
-    for (let i = 1; i < l.pts.length && inst.length < 1200; i++) {
+    for (let i = 1; i < l.pts.length && inst.length < 4000; i++) {
       const a = l.pts[i - 1];
       const b = l.pts[i];
       const dx = (b[0] - a[0]) * unit;
@@ -791,7 +792,7 @@ function placeLamps(lines, E, unit) {
         const x = a[0] * unit + ux * t;
         const z = a[1] * unit + uz * t;
         if (x < 0 || z < 0 || x > E * unit || z > E * unit) continue;
-        for (const side of [1, -1]) {
+        for (const side of l.width < 8 ? [n % 2 ? 1 : -1] : [1, -1]) {
           const nx = -uz * side;
           const nz = ux * side;
           const off = l.width / 2 - 0.35;

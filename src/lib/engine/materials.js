@@ -349,7 +349,7 @@ export function createMaterials(field) {
           diffuseColor.rgb = texture(uGroundTex, vec3(vW.xz / 5.0, 4.0)).rgb;
         } else if (W < 4.0) {
           // Chemins et voies de service : revêtement clair, sans bordure.
-          diffuseColor.rgb = vec3(0.5, 0.44, 0.34) * (0.78 + 0.44 * fbm2(vW.xz * 0.3)) * mix(0.8, 1.0, smoothstep(0.0, 0.4, halfW - xm));
+          diffuseColor.rgb = texture(uGroundTex, vec3(vW.xz / 5.0, 4.0)).rgb * vec3(1.06, 1.0, 0.88) * mix(0.82, 1.0, smoothstep(0.0, 0.4, halfW - xm));
         } else {
           diffuseColor.rgb = texture(uGroundTex, vec3(vW.xz / 7.0, 3.0)).rgb * (0.78 + 0.44 * fbm2(vW.xz * 0.07));
           // Usure au passage des roues, caniveau sombre le long de la bordure.
@@ -424,9 +424,10 @@ export function createMaterials(field) {
         gF = sampleField(vW.xz);
         float big = fbm2(vW.xz * 0.012);
         float mid = fbm2(vW.xz * 0.07);
-        diffuseColor.rgb *= texture(uGroundTex, vec3(vW.xz / 3.2, 5.0)).rgb * 2.2;
-        diffuseColor.rgb *= (0.68 + 0.64 * mid) * (0.8 + 0.4 * big);
-        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.35, 1.12, 0.62), smoothstep(0.45, 0.72, big * 0.5 + mid * 0.5) * 0.75);
+        diffuseColor.rgb *= texture(uGroundTex, vec3(vW.xz / 4.0, 5.0)).rgb * 2.3;
+        diffuseColor.rgb *= (0.86 + 0.28 * mid) * (0.9 + 0.2 * big);
+        float grassLuma = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(grassLuma) * vec3(1.05, 1.08, 0.72), 0.22 + 0.14 * big);
         diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.45, gF.a * 0.25 * mix(uScanGround, 0.2, uScan));
       `,
       emissive: groundEmission,
@@ -442,8 +443,7 @@ export function createMaterials(field) {
       fragmentHead: 'vec4 gF;',
       color: /* glsl */ `
         gF = sampleField(vW.xz);
-        vec3 ground = vec3(0.3, 0.29, 0.26) * (0.86 + 0.28 * fbm2(vW.xz * 0.03)) * texture(uGroundTex, vec3(vW.xz / 11.0, 0.0)).rgb * 2.1;
-        diffuseColor.rgb = mix(ground, diffuseColor.rgb, smoothstep(0.55, 0.85, uNight));
+        diffuseColor.rgb = texture(uGroundTex, vec3(vW.xz / 8.0, 4.0)).rgb * (0.72 + 0.3 * fbm2(vW.xz * 0.03)) * mix(1.0, 0.62, uNight);
         diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.5, gF.a * 0.4 * mix(uScanGround, 0.2, uScan));
       `,
       emissive: groundEmission,
@@ -515,7 +515,7 @@ export function createMaterials(field) {
           fn /= fn.x + fn.y + fn.z;
           float clump = texture2D(uNoise, vW.xz * 0.09).r * fn.y + texture2D(uNoise, vW.xy * 0.09).r * fn.z + texture2D(uNoise, vW.zy * 0.09).r * fn.x;
           gLeaf = smoothstep(0.28, 0.72, clump);
-          diffuseColor.rgb = leaf * (0.48 + 1.0 * gLeaf) * (0.42 + 1.05 * smoothstep(0.3, 1.0, vTreeY));
+          diffuseColor.rgb = leaf * (0.64 + 0.7 * gLeaf) * (0.42 + 1.05 * smoothstep(0.3, 1.0, vTreeY));
         }
       `,
     },
@@ -574,7 +574,7 @@ export function createMaterials(field) {
       `,
       fragmentHead: 'varying float vPart;',
       color: 'diffuseColor.rgb = vec3(0.17, 0.18, 0.19);',
-      emissive: 'if (vPart > 0.5) totalEmissiveRadiance += vec3(1.0, 0.76, 0.48) * (0.03 + 1.5 * uNight);',
+      emissive: 'if (vPart > 0.5) totalEmissiveRadiance += vec3(1.0, 0.76, 0.48) * (0.03 + 3.0 * uNight);',
     },
     'lamp',
   );
