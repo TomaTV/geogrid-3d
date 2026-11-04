@@ -54,10 +54,10 @@ Je ne l'ai pas réutilisé, pour trois raisons : c'est son propre moteur, pas un
 
 ## Fonctionnalités
 
-- **Ville 3D** : bâtiments, routes, eau et parcs d'OpenStreetMap, chargés autour de la caméra. Toits (tuiles, zinc, terrasses), cheminées, marquages au sol, arbres et voitures sont générés.
+- **Ville 3D** : bâtiments, routes, eau et parcs d'OpenStreetMap, chargés là où regarde la caméra et fondus dans le brouillard au loin, sans limite visible. Toits (tuiles, zinc, terrasses), cheminées, marquages au sol, arbres, lampadaires et voitures sont générés.
 - **Chargement et visite rapide** : un écran de chargement pendant la construction de la ville, puis une visite en 3 étapes la première fois (déplacement, clic sur un immeuble, modes et couleurs). Elle ne revient pas ensuite.
 - **Compteur FPS** : en bas à droite de la vue 3D.
-- **Modes d'affichage** : Standard (sombre), Real time (soleil selon l'heure et le lieu du scan), Dusk, Day et Night.
+- **Modes d'affichage** : Standard (nuit brumeuse), Real time (soleil selon l'heure et le lieu du scan), Dusk, Day et Night. En Standard et Night, vue de haut, la ville s'allume d'un point par lampadaire.
 - **Building colors** : colore les immeubles selon le rang, avec la palette de Geogrid.
 - **Recherche d'adresse** : se téléporte à n'importe quelle adresse (géocodage Nominatim), puis ouvre l'assistant avec cette adresse.
 - **Clic sur un immeuble** : rang estimé, point mesuré le plus proche, distance au commerce et meilleurs résultats à ce point.

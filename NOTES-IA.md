@@ -27,7 +27,12 @@ Moteur Three.js écrit de zéro, MapLibre et deck.gl ont été retirés. Inspir�
   - Voitures : instances 3D par tuile (`cars`), déplacées dans le vertex shader le long des tronçons droits, masquées au-delà de 1,3 km et en Low power. De plus loin, de simples traînées lumineuses la nuit.
   - Hauteur manquante dans OSM (5 m par défaut) : estimée immeuble par immeuble depuis son empreinte (environ 5 à 25 m). Le panneau dit « about ».
   - Arbres procéduraux : parcs en bosquets, forêts denses, alignement le long des rues, avec un raster d'occupation pour éviter immeubles, routes et eau.
-- Niveaux de détail : zoom 14 complet autour de la cible, zoom 13 en volumes simples au-delà (jusqu'à 18 km, `buildingMid`, sans ombres), zoom 11 pour le sol lointain. La bascule suit `uFocusR`. Seules les tuiles dans le champ de la caméra se chargent ; les autres restent en mémoire dans la limite des budgets, celles de derrière partent en premier. Après l'arrivée animée seulement.
+- Niveaux de détail : zoom 14 complet autour du centre de détail, zoom 13 en volumes simples au-delà (jusqu'à 18 km, `buildingMid`, sans ombres), zoom 11 pour le sol lointain. Le centre de détail (`focusCenter()`) est la cible décalée de 0,25 × `focusRadius` du côté où regarde la caméra. Seules les tuiles dans le champ de la caméra se chargent ; les autres restent en mémoire dans la limite des budgets, celles de derrière partent en premier. Après l'arrivée animée seulement.
+- Bascule zoom 14 / zoom 13 (`LOD`, `GROW`, `GROW_MID` dans `materials.js`) : chaque immeuble passe entier d'une version à l'autre, entre 0,74 et 1 × `uFocusR`, selon un bruit lent (`lodPick`, 240 m) de la position de son centre, le même dans les deux shaders. Avant, les deux versions rétrécissaient en sens inverse dans l'anneau : immeubles à mi-hauteur, murs superposés qui scintillaient, cercle visible.
+- Brouillard de bord (`EDGE_FOG`, remplace `fog_fragment` dans tous les matériaux patchés) : tout atteint la couleur du brouillard avant `uEdge` (rayon des tuiles de zoom 13, `midR`), mesuré depuis `uFocus`. Plus de fin de ville ni de bande sombre à l'horizon en Day. Un matériau non patché (repères) n'en profite pas.
+- Arbres, cheminées (`buildingDetail`, `DETAIL_FADE`) et mâts de lampadaires s'effacent un par un dans le vertex shader avec la distance à la caméra ; la visibilité par tuile n'est plus qu'un garde-fou au-delà. Au-delà des arbres 3D, la verdure boisée dessine une canopée (densité d'arbres dans `aRoad.w`).
+- Sol d'une tuile en un seul maillage et un seul appel (`ground`, `mergeGround()` dans le worker) : verdure, eau puis routes dans cet ordre d'index. `aRoad.w` : -2 eau, -1 à -0,6 verdure (couleur dans `aRoad.xyz`, densité d'arbres = (w + 1) / 0,4), >= 0 route.
+- Lumières de la ville vue du ciel (`lights`, `placeLights()`) : un `THREE.Points` par tuile de zoom 13 et 14, un point par lampadaire le long de chaque voie. Visibles seulement si `night > 0,6` (Standard, Night) et caméra au-dessus de 60 m, taille entre 0,8 et 1,7 × dpr, nulles en dessous de 250 m de distance.
 - Coût mesuré : le rendu de près coûte plus cher que le dézoom, c'est le calcul par pixel. D'où la pré-passe de profondeur des immeubles (`buildingPre`, sur les tuiles à moins de 3 km), le sol qui teste la profondeur et le bruit en texture (`uNoise`). Sur la machine de Thomas : 60 FPS verrouillés, 3 à 5 M de triangles, 120 à 200 appels. Le headless annonçait 15 FPS, il ne prédit rien.
 - `engine/textures.js` : textures de façades et de sol dessinées une fois au démarrage sur canvas, en tableaux avec mipmaps. L'alpha des façades porte le verre. Aucune image à télécharger.
 - Routes en deux passes dans le même maillage : trottoirs (`aRoad.z` négatif) puis chaussée, pour que le bitume recouvre les trottoirs aux carrefours. `aRoad.w` = distance à la fin du tronçon. Marquages effacés près des extrémités, passages piétons aux deux bouts.
@@ -36,12 +41,12 @@ Moteur Three.js écrit de zéro, MapLibre et deck.gl ont été retirés. Inspir�
 - Budget mesuré chez Thomas à 24,8 M de triangles et 847 appels en déplacement, 27 FPS. Depuis : zone détaillée de 1,4 km minimum au lieu de 2,6, 36 tuiles au plus, pré-passe limitée à 900 m, ombres recalculées seulement à l'arrêt, cheminées sans ombre. Le compteur inclut la passe d'ombre.
 - Distances d'affichage (voitures, lampadaires, cheminées, ombres de contact, pré-passe) mesurées jusqu'au bord de la tuile : au centre, une tuile de 1,6 km survolée restait masquée. Sol de ville, trottoirs et chemins partagent le dallage de `textures.js`.
 - `engine/field.js` : projection locale en mètres et champ de rang, source unique de la couleur et du rang du panneau. Toute la zone du scan reçoit une estimation (poids en inverse de la distance aux points mesurés, un point hors top 20 pèse moins), seul le bord s'estompe. Déformation organique cuite dans la texture 256x256 et appliquée aussi au clic.
-- `engine/materials.js` : shaders Lambert (eau en Standard). Fenêtres, façades, toits (`aMeta.x` : 0 mur, 1 terrasse, 2 tuiles, 3 zinc, 4 équipement, 5 acrotère), routes avec marquages et passages piétons, voitures, lampadaires, eau, arbres. Le scan passe par les routes, les fenêtres, le bas des murs ; immeubles entiers avec Building colors. Sol dessiné sans test de profondeur, dans l'ordre (pas de z-fighting).
+- `engine/materials.js` : shaders Lambert. Eau : reflet du ciel de `sky.js` par Fresnel (`uSkyZenith`, `uSkyHorizon`, `uFogCol`, `uSunDir`), houle lente de 15 à 40 m qui s'aplatit au loin, rien de plus fin. Fenêtres, façades, toits (`aMeta.x` : 0 mur, 1 terrasse, 2 tuiles, 3 zinc, 4 équipement, 5 acrotère), routes avec marquages et passages piétons, voitures, lampadaires, eau, arbres. Le scan passe par les routes, les fenêtres, le bas des murs ; immeubles entiers avec Building colors. Sol dessiné sans test de profondeur, dans l'ordre (pas de z-fighting).
 - `engine/landmarks.js` : tour Eiffel (treillis) et pyramide du Louvre dessinées à la main ; les bâtiments OSM sous la tour sont exclus dans le worker.
 - `engine/sky.js` : ciel, soleil, nuages, étoiles et presets Standard, Dusk, Day, Night, plus `livePreset` pour Real time (soleil calculé selon l'heure et le lieu du scan). Voir Réglages par mode.
 - `rank-colors.js` : palette exacte de Geogrid. Hors top 20 = gris `#555555`, pas rouge.
 
-Apparition : les immeubles et les arbres poussent en vague depuis le centre du scan, un front lumineux révèle les couleurs. La zone détaillée est un cercle de 1,4 à 3,2 km selon le zoom ; les tuiles sorties largement du cercle sont retirées. Les ombres (carte 3072) couvrent le cercle, ne se recalculent que si la scène ou la cible change et s'effacent entre 1,9 et 3,2 km de distance caméra. Déplacement borné à 150 km de l'origine, zoom trackpad lissé. La recherche d'adresse recrée le moteur avec `options.origin` : la projection n'est juste qu'autour de son origine. Sélection au clic seulement (pas de survol), par lancer de rayon : la distance au commerce part du point touché, avec un arc animé et une pastille.
+Apparition : les immeubles et les arbres poussent en vague depuis le centre du scan, un front lumineux révèle les couleurs. La zone détaillée fait 1,3 à 2,8 km de rayon selon le zoom, autour du centre de détail ; les tuiles sorties largement de la zone sont retirées. Les ombres (carte 3072) couvrent le cercle, ne se recalculent que si la scène ou la cible change et s'effacent entre 1,9 et 3,2 km de distance caméra. Déplacement borné à 150 km de l'origine, zoom trackpad lissé. La recherche d'adresse recrée le moteur avec `options.origin` : la projection n'est juste qu'autour de son origine. Sélection au clic seulement (pas de survol), par lancer de rayon : la distance au commerce part du point touché, avec un arc animé et une pastille.
 
 ## App Angular
 
@@ -77,6 +82,12 @@ Dans `src/lib/engine/sky.js`, chaque preset porte :
 - Aucune valeur calculée par tuile dans le rendu : les tuiles sont carrées, le moindre écart dessine des blocs visibles (cas réel avec la médiane des hauteurs).
 - Rendu logiciel headless : au dézoom complet, la capture peut bloquer sur les tuiles. Dézoomer de 3 crans au plus dans les tests.
 - Après modification d'`angular.json` ou des dépendances : relancer `npm run dev` et vider `.angular/cache` si Vite garde l'ancien bundle.
+- Scintillement : tout motif plus fin qu'un pixel doit être remplacé par sa moyenne quand il rapetisse (`fwidth`), sinon il clignote en mouvement. Cas corrigés : reflets par fenêtre (`gDetail`), meneaux des vitrines, bandes des passages piétons, joints des ponts, traînées de voitures, mâts des lampadaires, ancienne eau.
+- Dérivées (`fwidth`, `texture` implicite) jamais dans une branche qui dépend du triangle : calculées avant (`ROAD_PRE`), sinon valeurs fausses au bord des triangles.
+- Pré-passe de profondeur (`buildingPre`) décalée par `polygonOffset` : sans ça, la passe principale, compilée à part, peut échouer au test d'égalité et laisser voir le ciel sur les façades.
+- Carte d'ombre calée sur la grille de ses texels et taille arrondie à 200 m (`updateShadow`) : sinon chaque recalcul déplace les bords d'ombre.
+- Hauteur estimée d'un immeuble : calculée sur l'empreinte avant découpe à la tuile (`rawArea`, `rawMin`), sinon les deux moitiés d'un immeuble à cheval ont deux hauteurs.
+- Mesure de perf headless : `--disable-gpu-vsync --disable-frame-rate-limit`, sinon le compteur plafonne à 144.
 
 ## Consigne du cours sur l'IA
 
@@ -95,11 +106,10 @@ Décisions de Thomas : pas de mobile, pas de comparaison de scans. Pas de test h
 ## À vérifier ou à améliorer
 
 - Fluidité et RAM jamais mesurées sur un vrai GPU, surtout au dézoom complet : Thomas juge sur sa machine. Leviers : `MAX_NEAR`, `focusRadius`, taille de la carte d'ombre, `dpr`, bouton Low power.
-- Non revus en capture après les derniers réglages : Day et Standard, Building colors en Night, zones de hauteur au dézoom complet, Real time.
+- Non revus en capture après les derniers réglages : Building colors en Night, zones de hauteur au dézoom complet, Real time.
 - Night peut être trop sombre : fenêtres peu visibles sur la dernière capture.
 - La bascule ombres / sans ombres au dézoom peut se remarquer.
 - Tour Eiffel jugée un peu cheap par Thomas, acceptée.
-- Day avec une vue dézoomée : bande sombre à l'horizon, probablement le plan `land` (sombre) vu au-delà des tuiles avant que le brouillard ne le couvre. Pas corrigé.
 - Pas d'occlusion ambiante en post-traitement. `GTAOPass` possible si le GPU suit.
 
 ## Mise à jour du 2026-11-04 (soir)
@@ -108,3 +118,12 @@ Décisions de Thomas : pas de mobile, pas de comparaison de scans. Pas de test h
 - Captures du README refaites sur GPU : la vue par défaut (sans Building colors) est la capture principale, Building colors vient en second.
 - Angular 22 exige Node 22.22.3+ ou 24.15+ : avec Node 24.14, `ng serve` refuse de démarrer.
 - Idées notées, non faites : écran de chargement, onboarding rapide, page About à garder ou supprimer (tout est dans le README).
+
+## Mise à jour du 2026-11-04 (passe visuelle)
+
+Demande de Thomas : scintillements, eau, Standard redevenu moche, cercle visible au dézoom, Night trop sombre vue du ciel, cohérence. Fait :
+
+- Standard : retour aux réglages de lumière, de ciel et de brouillard d'avant le commit `19a9707` (heure bleue), avec les lumières de ville d'alors (`facade` 0,6, `shop` 1,1, `winGlow` 1,25). Teinte du scan au sol laissée basse, comme décidé ensuite.
+- Eau, scintillements, cercle, lumières vues du ciel : voir Moteur et Pièges.
+- Mesures (headless GPU sans vsync, 2560x1440, Standard) : vue par défaut 224 FPS, 6,25 M triangles, 160 appels (avant 205 à 230 FPS, 5,9 à 6,6 M, 190 à 202 appels) ; un cran de dézoom 190 FPS, 6,7 M, 190 appels (avant 176, 8,2 M, 245) ; dézoom large 176 FPS, 9,3 M, 290 appels (avant 146, 11 M, 400). Night au dézoom large avec les lumières : 152 FPS, 9,8 M, 300 appels.
+- Reste : les arbres détaillés ne s'affichent que sur la tuile sous la caméra à moins de 180 m d'altitude (bascule visible en traversant le bord de tuile) ; l'herbe reste d'un vert franc en Day ; les lumières vues du ciel ne suivent que les voies, pas les places ni les quais sans route.
