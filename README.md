@@ -4,6 +4,8 @@
 
 Projet d'école réalisé pour le cours Angular de l'IIM.
 
+**Démo en ligne : https://3d.geogrid.dev**
+
 [Geogrid](https://geogrid.dev) mesure la position d'un commerce sur Google Maps, point par point, sur une grille géographique. Geogrid 3D affiche ce résultat dans une ville en 3D : on se déplace dans les rues, on clique sur un immeuble, et le classement estimé à cet endroit s'affiche.
 
 Le rang est mesuré aux points du scan, pas à chaque immeuble. Entre deux points, la couleur et le rang affichés sont une estimation.
@@ -15,6 +17,12 @@ Le scan de démonstration est un vrai scan Geogrid en 21x21 sur un rayon de 5 km
 Un clic sur un immeuble affiche le rang estimé à cet endroit, le point mesuré le plus proche, la distance au commerce et les meilleurs résultats.
 
 ![Panneau affiché au clic sur un immeuble, avec le rang estimé et les meilleurs résultats](docs/clic.png)
+
+Plusieurs modes visuels changent la lumière et le ciel. Ici Dusk et Day, avec Building colors.
+
+![Mode Dusk avec Building colors](docs/dusk.png)
+
+![Mode Day avec Building colors](docs/day.png)
 
 La collection garde les scans sauvegardés, avec leur rang moyen et la répartition de leurs rangs.
 
@@ -78,7 +86,13 @@ La clé reste côté serveur : le proxy ajoute l'en-tête `Authorization`, le na
 npm run build
 ```
 
-Le résultat est généré dans `dist/geogrid-3d/`. Il s'agit de fichiers statiques : la collection a besoin de json-server, qui n'en fait pas partie.
+Le résultat est généré dans `dist/geogrid-3d/`.
+
+## Déploiement sur Vercel
+
+`vercel.json` configure le build, le routage de l'application et l'API. Aucune variable d'environnement n'est nécessaire en mode mock.
+
+Sur Vercel, json-server tourne dans une fonction (`api/collection.mjs`). Le disque n'y est pas conservé : la collection reste en mémoire et revient au contenu de `db.seed.json` quand la fonction redémarre. Les scans ajoutés ou modifiés ne sont donc pas durables en ligne.
 
 ## Architecture
 
@@ -95,7 +109,8 @@ src/
     engine/materials.js  Shaders
     engine/sky.js        Ciel et réglages de chaque mode
     engine/landmarks.js  Tour Eiffel et pyramide du Louvre
-server/proxy.mjs         Proxy de la clé API
+server/proxy.mjs         Proxy de la clé API, en local
+api/collection.mjs       json-server sur Vercel
 ```
 
 ## Notions Angular utilisées

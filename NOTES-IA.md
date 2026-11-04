@@ -70,7 +70,7 @@ Dans `src/lib/engine/sky.js`, chaque preset porte :
 ## À faire (reprise : mercredi 2026-11-04 après-midi)
 
 1. Tests de bout en bout : création de scan depuis le wizard, collection, puis mode live. Prévus par Thomas plus tard.
-2. Déploiement Vercel sur `3d.geogrid.dev`, fait par Thomas : json-server et le proxy de clé ne tournent pas sur un site statique, la collection affichera son erreur tant que ce n'est pas réglé.
+2. Déploiement Vercel sur `3d.geogrid.dev`, fait par Thomas depuis le repo public. `vercel.json` et `api/collection.mjs` lancent json-server en mémoire : écritures perdues au démarrage à froid, et deux instances peuvent diverger. Jamais essayé sur un vrai déploiement. Proxy de clé et mode live pas encore portés sur Vercel (décision de Thomas : plus tard).
 
 Décisions de Thomas : pas de mobile, pas de comparaison de scans. Pas de test headless sans demande : ça fait chauffer son PC. Pour publier une mise à jour : `git subtree split --prefix=3d`, puis push du résultat sur `main` de `TomaTV/geogrid-3d`.
 
