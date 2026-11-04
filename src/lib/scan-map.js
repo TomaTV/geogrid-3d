@@ -657,9 +657,24 @@ export function createScanMap(container, scan, options) {
 
     if (!firstReady && z === NEAR_ZOOM) {
       firstReady = true;
-      introStart = now;
-      onReady?.({ tiles: tiles.size });
+      warmUp();
     }
+  }
+
+  // Écran de chargement : compile les shaders et laisse quelques tuiles se construire avant l'arrivée,
+  // sinon la première seconde saccade et les matériaux apparaissent par à-coups.
+  async function warmUp() {
+    const t0 = performance.now();
+    try {
+      await Promise.race([renderer.compileAsync(scene, camera), new Promise((r) => setTimeout(r, 4000))]);
+    } catch {}
+    const nearTiles = () => [...tiles.values()].filter((t) => t.z === NEAR_ZOOM).length;
+    while (!destroyed && (performance.now() - t0 < 900 || (nearTiles() < 5 && performance.now() - t0 < 6000))) {
+      await new Promise((r) => setTimeout(r, 80));
+    }
+    if (destroyed) return;
+    introStart = now;
+    onReady?.({ tiles: tiles.size });
   }
 
   function dropTile(entry) {
