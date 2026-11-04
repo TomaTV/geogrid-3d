@@ -8,6 +8,7 @@ export interface ScanNode {
 
 export interface Scan {
   id: string;
+  simulated?: boolean;
   keyword: string;
   target_name: string;
   latitude: number;

@@ -297,7 +297,7 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster) {
     for (const poly of polygonsOf(f, E)) {
       const outer = poly[0];
       const area = Math.abs(ringArea(outer)) * unit * unit;
-      if (area < (simple ? 40 : 18)) continue;
+      if (area < (simple ? 70 : 18)) continue;
       let h = top;
       const r0 = hash(Math.round(outer[0][0]), Math.round(outer[0][1]));
       // Hauteur absente dans OSM : estimée depuis l'empreinte seule. Une valeur par tuile créait des zones carrées visibles.
@@ -563,8 +563,25 @@ function buildBridges(lines, E, unit) {
     idx.push(v, v + 1, v + 2, v, v + 2, v + 3);
   };
   const nearBorder = (p) => p[0] <= 8 || p[1] <= 8 || p[0] >= E - 8 || p[1] >= E - 8;
-  for (const l of lines) {
-    if (!l.bridge || l.pts.length < 2) continue;
+  // OSM découpe un pont en plusieurs tronçons : on les raccorde, sinon chaque morceau aurait ses propres rampes.
+  const pieces = lines.filter((l) => l.bridge && l.pts.length >= 2).map((l) => ({ width: l.width, pts: [...l.pts] }));
+  const same = (p, q) => Math.abs(p[0] - q[0]) < 2 && Math.abs(p[1] - q[1]) < 2;
+  for (let merged = true; merged; ) {
+    merged = false;
+    for (let i = 0; i < pieces.length && !merged; i++) {
+      for (let j = 0; j < pieces.length && !merged; j++) {
+        if (i === j || pieces[i].width !== pieces[j].width) continue;
+        const A = pieces[i];
+        const B = pieces[j];
+        if (same(A.pts[A.pts.length - 1], B.pts[0])) A.pts.push(...B.pts.slice(1));
+        else if (same(A.pts[A.pts.length - 1], B.pts[B.pts.length - 1])) A.pts.push(...B.pts.slice(0, -1).reverse());
+        else continue;
+        pieces.splice(j, 1);
+        merged = true;
+      }
+    }
+  }
+  for (const l of pieces) {
     const pts = l.pts.map((p) => [p[0] * unit, p[1] * unit]);
     let total = 0;
     for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);

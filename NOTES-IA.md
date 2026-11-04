@@ -33,13 +33,14 @@ Moteur Three.js écrit de zéro, MapLibre et deck.gl ont été retirés. Inspir�
 - Routes en deux passes dans le même maillage : trottoirs (`aRoad.z` négatif) puis chaussée, pour que le bitume recouvre les trottoirs aux carrefours. `aRoad.w` = distance à la fin du tronçon. Marquages effacés près des extrémités, passages piétons aux deux bouts.
 - Lampadaires 3D instanciés par tuile (`lamps`), tous les 27 m pour tomber sur les halos du sol, masqués au-delà de 1,1 km et en Low power. Le scan ne teinte plus le bitume, seulement les trottoirs.
 - Ponts : volumes à part (`bridges`, tablier, parapets, piles, rampes), sur les tuiles de zoom 14 seulement ; sans voitures ni lampadaires dessus pour l'instant.
+- Budget mesuré chez Thomas à 24,8 M de triangles et 847 appels en déplacement, 27 FPS. Depuis : zone détaillée de 1,4 km minimum au lieu de 2,6, 36 tuiles au plus, pré-passe limitée à 900 m, ombres recalculées seulement à l'arrêt, cheminées sans ombre. Le compteur inclut la passe d'ombre.
 - `engine/field.js` : projection locale en mètres et champ de rang, source unique de la couleur et du rang du panneau. Toute la zone du scan reçoit une estimation (poids en inverse de la distance aux points mesurés, un point hors top 20 pèse moins), seul le bord s'estompe. Déformation organique cuite dans la texture 256x256 et appliquée aussi au clic.
 - `engine/materials.js` : shaders Lambert (eau en Standard). Fenêtres, façades, toits (`aMeta.x` : 0 mur, 1 terrasse, 2 tuiles, 3 zinc, 4 équipement, 5 acrotère), routes avec marquages et passages piétons, voitures, lampadaires, eau, arbres. Le scan passe par les routes, les fenêtres, le bas des murs ; immeubles entiers avec Building colors. Sol dessiné sans test de profondeur, dans l'ordre (pas de z-fighting).
 - `engine/landmarks.js` : tour Eiffel (treillis) et pyramide du Louvre dessinées à la main ; les bâtiments OSM sous la tour sont exclus dans le worker.
 - `engine/sky.js` : ciel, soleil, nuages, étoiles et presets Standard, Dusk, Day, Night, plus `livePreset` pour Real time (soleil calculé selon l'heure et le lieu du scan). Voir Réglages par mode.
 - `rank-colors.js` : palette exacte de Geogrid. Hors top 20 = gris `#555555`, pas rouge.
 
-Apparition : les immeubles et les arbres poussent en vague depuis le centre du scan, un front lumineux révèle les couleurs. La zone détaillée est un cercle de 2,6 à 5,2 km selon le zoom ; les tuiles sorties largement du cercle sont retirées. Les ombres (carte 3072) couvrent le cercle, ne se recalculent que si la scène ou la cible change et s'effacent entre 1,9 et 3,2 km de distance caméra. Déplacement borné à 150 km de l'origine, zoom trackpad lissé. La recherche d'adresse recrée le moteur avec `options.origin` : la projection n'est juste qu'autour de son origine. Sélection au clic seulement (pas de survol), par lancer de rayon : la distance au commerce part du point touché, avec un arc animé et une pastille.
+Apparition : les immeubles et les arbres poussent en vague depuis le centre du scan, un front lumineux révèle les couleurs. La zone détaillée est un cercle de 1,4 à 3,2 km selon le zoom ; les tuiles sorties largement du cercle sont retirées. Les ombres (carte 3072) couvrent le cercle, ne se recalculent que si la scène ou la cible change et s'effacent entre 1,9 et 3,2 km de distance caméra. Déplacement borné à 150 km de l'origine, zoom trackpad lissé. La recherche d'adresse recrée le moteur avec `options.origin` : la projection n'est juste qu'autour de son origine. Sélection au clic seulement (pas de survol), par lancer de rayon : la distance au commerce part du point touché, avec un arc animé et une pastille.
 
 ## App Angular
 
@@ -50,7 +51,7 @@ Apparition : les immeubles et les arbres poussent en vague depuis le centre du s
 
 ## Données
 
-- Fixture : `public/mock/scan-demo-21.json`, scan réel 21x21 (id `baf01975-faaa-441b-a0e7-38ed8495bc49`), « pizzeria », Casa'Mia à Boulogne-Billancourt, rayon 5 km, statut `partial`, 421 nœuds. Rangs : 75 en top 3, 51 en 4-10, 295 absents du top 20. Le sud du scan (rangs 6 à 9) sort du cadre de la vue par défaut.
+- Fixture : `public/mock/scan-demo-21.json`, **simulée à la demande de Thomas** (2026-11-04) par `scripts/demo-scan.mjs`, commerce et concurrents fictifs, drapeau `simulated: true` : pastille dans l'interface, pas de bouton Full scan. Ne jamais la présenter comme une mesure ni y mettre de vrai commerce. Vrais scans essayés et écartés, trop peu variés à l'écran : Pizza Piano à Paris (`d05fde05-ad87-46da-a601-32601fcd10d4`, rang 2 presque partout), Casa'Mia à Boulogne (`baf01975-faaa-441b-a0e7-38ed8495bc49`).
 - `scan.latitude/longitude` = centre demandé. Position du commerce = `grid_data[n].self.lat/lng` (fiche Google trouvée), différente du centre.
 - Rang `null` = non mesuré, rang 101 = absent du top 20. Ne pas confondre.
 - Un commerce local n'est classé que dans sa commune et ses voisines : un scan de 5 km reste en bonne partie hors top 20. Essai du 2026-11-04 autour d'Asnières (id `968b880b-7a8d-4efd-8321-8897f31a5d4b`) : 85 % de points absents, moins riche que Casa'Mia, écarté.
@@ -75,6 +76,10 @@ Dans `src/lib/engine/sky.js`, chaque preset porte :
 - Aucune valeur calculée par tuile dans le rendu : les tuiles sont carrées, le moindre écart dessine des blocs visibles (cas réel avec la médiane des hauteurs).
 - Rendu logiciel headless : au dézoom complet, la capture peut bloquer sur les tuiles. Dézoomer de 3 crans au plus dans les tests.
 - Après modification d'`angular.json` ou des dépendances : relancer `npm run dev` et vider `.angular/cache` si Vite garde l'ancien bundle.
+
+## Consigne du cours sur l'IA
+
+Rendu obligatoire : un document texte expliquant les choix et la façon d'obtenir les fonctionnalités, et, si l'IA est utilisée, les prompts et l'usage du contexte. Une vidéo équivalente est acceptée à la place. Le texte est dans la section « Démarche et usage de l'IA » du README : la tenir à jour à chaque évolution notable, avec de vrais prompts de Thomas, jamais inventés.
 
 ## À faire (reprise : mercredi 2026-11-04 après-midi)
 

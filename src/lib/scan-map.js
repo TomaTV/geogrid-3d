@@ -14,7 +14,7 @@ import { PRESETS, createSky, livePreset, sunDirection } from './engine/sky.js';
 
 const TILES_URL = 'https://tiles.openfreemap.org/planet';
 const WORKERS = 2;
-const MAX_NEAR = 90;
+const MAX_NEAR = 36;
 const FAR_ZOOM = 11;
 const NEAR_ZOOM = 14;
 const MID_ZOOM = 13;
@@ -88,11 +88,10 @@ function treeGeometries() {
     return g;
   };
   const near = mergeGeometries([
-    unit(new THREE.CylinderGeometry(0.05, 0.08, 0.3, 5, 1, true), 1, 1, 1, 0, 0.15, 0),
-    blob(1, 0.82, 0.38, 0.82, 0, 0.55, 0, 1),
-    blob(1, 0.56, 0.3, 0.56, 0.36, 0.68, 0.2, 2),
-    blob(1, 0.5, 0.26, 0.5, -0.34, 0.66, -0.16, 3),
-    blob(1, 0.44, 0.24, 0.44, 0.02, 0.8, -0.3, 4),
+    unit(new THREE.CylinderGeometry(0.06, 0.1, 0.34, 5, 1, true), 1, 1, 1, 0, 0.17, 0),
+    blob(1, 0.86, 0.36, 0.86, 0, 0.56, 0, 1),
+    blob(1, 0.58, 0.3, 0.58, 0.34, 0.7, 0.16, 2),
+    blob(1, 0.52, 0.28, 0.52, -0.32, 0.72, -0.2, 3),
   ]);
   const far = blob(0, 0.95, 0.45, 0.95, 0, 0.58, 0, 1);
   return { near, far };
@@ -152,7 +151,7 @@ export function createScanMap(container, scan, options) {
   const hemi = new THREE.HemisphereLight(0xffffff, 0x222222, 1);
   scene.add(hemi);
 
-  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
+  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: (window.devicePixelRatio || 1) >= 1.5 ? 2 : 4 }));
   composer.setPixelRatio(dpr);
   composer.setSize(container.clientWidth, container.clientHeight);
   composer.addPass(new RenderPass(scene, camera));
@@ -330,7 +329,7 @@ export function createScanMap(container, scan, options) {
   const exclude = [[...proj.toWorld(2.2945, 48.85826), 135]];
   const look = new THREE.Vector3();
   const focusTo = new THREE.Vector2();
-  const focusRadius = (dist) => (introDone ? THREE.MathUtils.clamp(dist * 1.7, 2600, 5200) : 3200);
+  const focusRadius = (dist) => (introDone ? THREE.MathUtils.clamp(dist * 2.2, 1400, 3200) : 2600);
   function refreshTiles() {
     if (!template) return;
     const t = controls.target;
@@ -412,7 +411,7 @@ export function createScanMap(container, scan, options) {
     }
     const near = [...tiles.values()].filter((e) => e.z === NEAR_ZOOM);
     // Au zoom avant, on rend la mémoire des tuiles sorties largement du cercle.
-    for (const e of near) if (Math.hypot(e.cx - t.x, e.cz - t.z) > R * 1.5 + size) dropTile(e);
+    for (const e of near) if (Math.hypot(e.cx - t.x, e.cz - t.z) > R * 1.25 + size) dropTile(e);
     if (near.length > MAX_NEAR) {
       near
         .map((e) => [e, behindFirst(e)])
@@ -424,17 +423,14 @@ export function createScanMap(container, scan, options) {
       const d = Math.hypot(e.cx - camera.position.x, e.cz - camera.position.z);
       if (e.detailMesh) {
         const show = extrasOn && d < 1500;
-        if (e.detailMesh.visible !== show) {
-          e.detailMesh.visible = show;
-          shadowDirty = true;
-        }
+        e.detailMesh.visible = show;
       }
-      if (e.preMesh) e.preMesh.visible = d < 3000;
+      if (e.preMesh) e.preMesh.visible = d < 900;
       if (e.skirtMesh) e.skirtMesh.visible = extrasOn && d < 1500;
       if (e.carMesh) e.carMesh.visible = extrasOn && d < 1300;
       if (e.lampMesh) e.lampMesh.visible = extrasOn && d < 800;
       if (!e.treeMesh) continue;
-      const useNear = d < 900;
+      const useNear = d < 1200;
       const geo = useNear ? e.treeNear : e.treeFar;
       if (e.treeMesh.geometry !== geo) {
         e.treeMesh.geometry = geo;
@@ -521,9 +517,7 @@ export function createScanMap(container, scan, options) {
       g.setIndex(new THREE.BufferAttribute(d.idx, 1));
       g.computeBoundingSphere();
       const mesh = new THREE.Mesh(g, mats.building);
-      mesh.customDepthMaterial = mats.buildingDepth;
       mesh.position.set(result.origin[0], 0, result.origin[1]);
-      mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.matrixAutoUpdate = false;
       mesh.updateMatrix();
@@ -868,14 +862,16 @@ export function createScanMap(container, scan, options) {
   });
   resize.observe(container);
 
-  function updateShadow() {
+  function updateShadow(moving) {
     const t = controls.target;
     const camDist = camera.position.distanceTo(t);
     // La boîte d'ombre couvre le cercle chargé (pas de bord carré visible) ; au dézoom les ombres s'effacent, la carte n'a plus la résolution.
     const S = Math.min(focusRadius(camDist) * 1.02, 4600);
     sun.shadow.intensity = 1 - THREE.MathUtils.smoothstep(camDist, 1900, 3200);
     const c = sun.shadow.camera;
-    if (now - shadowAt < 0.7) return;
+    if (sun.shadow.intensity <= 0) return;
+    // Les ombres se recalculent à l'arrêt : c'est toute la ville à redessiner.
+    if (moving || now - shadowAt < 0.7) return;
     if (!shadowDirty && shadowAnchor.distanceTo(t) < S * 0.2 && Math.abs(c.right - S) < S * 0.3) return;
     shadowAt = now;
     c.left = -S;
@@ -1014,7 +1010,7 @@ export function createScanMap(container, scan, options) {
       refreshTiles();
     }
 
-    updateShadow();
+    updateShadow(changed || keys.size > 0);
     // Toujours par le composer : en rendu direct, three applique le brouillard après la conversion sRGB et il ne raccorde plus avec le ciel (ligne à l'horizon).
     bloom.enabled = quality < 2;
     renderer.info.reset();

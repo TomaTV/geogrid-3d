@@ -18,7 +18,7 @@ type Field = 'address' | 'keyword' | 'business' | 'note';
         <h1 class="font-display text-[clamp(1.6rem,4vw,2.2rem)] italic leading-[1.1] tracking-tight"><span class="font-semibold text-white">Three steps</span><span class="font-light text-white/50">&nbsp;to scan.</span></h1>
         <p class="mt-1.5 text-[12.5px] text-white/30">
           @if (source.mode === 'mock') {
-            Mock mode: the result comes from a real scan saved in the project, no credit is used.
+            Mock mode: the result is a simulated demo scan, not a measurement. No credit is used.
           } @else {
             Live mode: each point costs one Geogrid credit.
           }

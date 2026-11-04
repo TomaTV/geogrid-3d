@@ -43,7 +43,11 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
           <p class="eyebrow">{{ s.keyword }}</p>
           <h1 class="display mt-1 text-[28px] drop-shadow-[0_2px_14px_rgba(0,0,0,0.7)]">{{ s.target_name }}</h1>
           <p class="mt-1.5 font-mono text-[10.5px] tracking-[0.04em] text-white/55 drop-shadow-[0_1px_6px_rgba(0,0,0,0.8)]">{{ s.grid_data.length }} points · {{ top3(s) }}% top 3 · avg {{ avg(s) }}</p>
-          <a [href]="geogridUrl(s.id)" target="_blank" rel="noopener" class="pointer-events-auto mt-2 inline-flex h-6 items-center gap-1 rounded-md border border-white/10 bg-[rgba(10,10,12,0.7)] px-2 font-mono text-[10px] uppercase tracking-[0.1em] text-white/60 backdrop-blur-xl transition hover:border-accent/40 hover:text-accent">Full scan &#8599;</a>
+          @if (s.simulated) {
+            <span class="mt-2 inline-flex h-6 items-center rounded-md border border-amber-300/30 bg-[rgba(10,10,12,0.7)] px-2 font-mono text-[10px] uppercase tracking-[0.1em] text-amber-200/80 backdrop-blur-xl">Simulated demo data</span>
+          } @else {
+            <a [href]="geogridUrl(s.id)" target="_blank" rel="noopener" class="pointer-events-auto mt-2 inline-flex h-6 items-center gap-1 rounded-md border border-white/10 bg-[rgba(10,10,12,0.7)] px-2 font-mono text-[10px] uppercase tracking-[0.1em] text-white/60 backdrop-blur-xl transition hover:border-accent/40 hover:text-accent">Full scan &#8599;</a>
+          }
         </div>
 
         @if (active(); as a) {

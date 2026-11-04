@@ -28,7 +28,7 @@ import { RouterLink } from '@angular/router';
       <h2 class="display mt-12 text-[28px]">Comment ça marche</h2>
       <ul class="mt-4 space-y-3 text-[14px] text-white/65">
         <li><span class="eyebrow mr-2">Données</span>l'API publique de Geogrid, derrière un petit proxy qui garde la clé côté serveur.</li>
-        <li><span class="eyebrow mr-2">Mode mock</span>un vrai scan figé, aucun crédit consommé. Le mode live lance un vrai scan.</li>
+        <li><span class="eyebrow mr-2">Mode mock</span>un scan de démonstration simulé, avec un commerce fictif, aucun crédit consommé. Le mode live lance un vrai scan.</li>
         <li><span class="eyebrow mr-2">Moteur</span>écrit avec Three.js : bâtiments, routes et parcs d'OpenStreetMap construits dans des workers autour de la caméra, arbres et toits procéduraux, ciel, ombres et heure du jour.</li>
         <li><span class="eyebrow mr-2">Collection</span>les scans sont sauvegardés avec json-server (lecture, modification, suppression).</li>
         <li><span class="eyebrow mr-2">Angular</span>composants standalone, signaux, formulaire réactif, routes chargées à la demande.</li>

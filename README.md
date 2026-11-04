@@ -1,6 +1,6 @@
 # Geogrid 3D
 
-![Scan affiché dans la ville en 3D, les immeubles en vert sont bien classés, ceux en gris sont absents du top 20](docs/hero.png)
+![Scan simulé affiché sur Paris en 3D, la couleur des immeubles suit le rang estimé](docs/hero.png)
 
 Projet d'école réalisé pour le cours Angular de l'IIM.
 
@@ -12,7 +12,7 @@ Le rang est mesuré aux points du scan, pas à chaque immeuble. Entre deux point
 
 ## En images
 
-Le scan de démonstration est un vrai scan Geogrid en 21x21 sur un rayon de 5 km autour de Boulogne-Billancourt, pour le mot-clé « pizzeria ». Les couleurs reprennent la palette de Geogrid, et l'écart entre le vert et le gris se lit directement dans la ville.
+Le scan de démonstration est **simulé** : le commerce et les concurrents sont fictifs, et les rangs sont générés par `scripts/demo-scan.mjs` sur une grille 21x21 autour du centre de Paris. Il montre ce que donne un scan varié, ce n'est pas une mesure de Geogrid, et l'interface l'indique. Le mode live affiche de vraies mesures.
 
 Un clic sur un immeuble affiche le rang estimé à cet endroit, le point mesuré le plus proche, la distance au commerce et les meilleurs résultats.
 
@@ -72,7 +72,7 @@ Au premier lancement, `db.json` est créé à partir de `db.seed.json`. Ce fichi
 
 Le mode se choisit avec `SCAN_MODE` dans `src/app/data/scan.ts`.
 
-- **`mock`** (par défaut) : le résultat vient d'un vrai scan Geogrid figé dans `public/mock/`. Aucune clé ni aucun crédit nécessaire.
+- **`mock`** (par défaut) : le résultat est le scan simulé de `public/mock/`. Aucune clé ni aucun crédit nécessaire.
 - **`live`** : lance un vrai scan via l'API de Geogrid. Chaque point coûte un crédit, et il faut une clé d'un compte payant :
 
 ```bash
@@ -130,10 +130,41 @@ Angular 22, Three.js, Tailwind CSS v4, json-server, tuiles [OpenFreeMap](https:/
 
 Données cartographiques : © [OpenMapTiles](https://www.openmaptiles.org/), © les contributeurs [OpenStreetMap](https://www.openstreetmap.org/copyright). Le rendu s'inspire de [Streets GL](https://github.com/StrandedKitty/streets-gl), sans en reprendre le code.
 
+## Démarche et usage de l'IA
+
+Le projet a été construit avec Claude Code (Anthropic), un agent qui lit le dépôt, écrit le code et lance les commandes. L'IA a écrit l'essentiel du code. Mon rôle a été de décider quoi construire, de juger le résultat et de le corriger.
+
+### Les choix
+
+- **Un moteur Three.js écrit pour le projet.** Le prototype a d'abord utilisé MapLibre, puis deck.gl. Les deux limitaient le rendu visé, inspiré de Streets GL, donc j'ai demandé de repartir de zéro.
+- **Pas de grille visible.** Geogrid mesure des points. Afficher des cases aurait donné un quadrillage : le rang est donc estimé entre les points, et l'interface dit clairement que c'est une estimation.
+- **Un scan de démonstration simulé.** Les vrais scans essayés donnaient peu de variété à l'écran : un commerce local n'est classé que dans sa commune et ses voisines, et le rang change à peine à l'intérieur de Paris. La démo utilise donc des données générées, annoncées comme telles, sur un commerce fictif. Le mode mock tourne sans clé ni crédit. La clé API ne va jamais dans le navigateur ni dans le dépôt : un proxy local l'ajoute côté serveur.
+- **Le projet reste séparé de Geogrid.** Il ne touche pas au produit.
+
+### Comment j'ai utilisé l'IA
+
+**Donner le contexte une fois pour toutes.** `NOTES-IA.md` décrit l'architecture, les réglages et les pièges. L'agent le lit à chaque reprise, et je n'ai pas à tout réexpliquer. Il contient aussi les décisions prises et ce qui reste à faire.
+
+**Montrer plutôt que décrire.** La plupart de mes retours sont des captures d'écran avec une phrase courte. Le compteur de FPS, avec le nombre de triangles et d'appels de rendu, a transformé « ça rame » en un chiffre exploitable.
+
+**Exemples de prompts réels :**
+
+- « Peut-être avoir de vrai route ? » (avec une capture)
+- « Pouvoir chercher une adresse […] pouvoir se tp à une adresse ? et qu'on puisse aller n'importe ou mais optimise »
+- « mais oui lui utilise des textures directement, on peut pas optimisé et rendre encore plus beau ? pas forcément plus de détail mais une meilleur lumière, texture ? »
+- « la route est bizarre et arbre aussi […] en zoomant et quand je me déplace, à peine 30fps » (avec une capture du compteur)
+- « juste quand on bouge plus, le site se met en 15fps »
+
+**Vérifier, parce que l'IA se trompe.** Trois exemples de ce projet :
+
+- L'agent a mesuré 15 FPS dans ses propres tests et a cherché un problème de performance. La cause était une limite qu'il avait lui-même ajoutée quand la caméra ne bouge pas. C'est mon retour sur ma machine qui l'a révélé.
+- Aucun toit en pente n'était généré, à cause d'une fonction qui élargissait les bâtiments au lieu de les réduire. Le bug n'est apparu qu'en regardant le rendu de près.
+- Les premiers ponts étaient cassés, parce que chaque tronçon d'OpenStreetMap avait ses propres rampes. Je l'ai signalé et le correctif raccorde les tronçons.
+
 ## Limites connues
 
 - La création de scan depuis l'assistant et le mode live n'ont pas encore été testés de bout en bout.
-- Le scan d'exemple a le statut partiel : 421 points mesurés sur 441.
+- Le scan d'exemple est simulé : ses rangs ne disent rien du classement réel d'un commerce.
 - En mode mock, l'assistant renvoie toujours le scan d'exemple : l'adresse, la grille et le rayon choisis n'ont pas d'effet sur le résultat.
 - Les hauteurs absentes d'OpenStreetMap sont estimées d'après la taille au sol du bâtiment.
 - Sur une machine modeste, activer **Low power** dans Settings.

@@ -270,7 +270,7 @@ export function createMaterials(field) {
           float density = 0.28 + 0.1 * gF.a;
           vec3 tint = rnd2 > 0.95 ? vec3(0.68, 0.8, 1.0) : mix(vec3(1.0, 0.6, 0.28), vec3(1.0, 0.8, 0.56), fract(rnd * 17.0));
           float scanned = max(step(rnd2, gF.a * uScanWin), gF.a * uScan);
-          vec3 win = mix(tint, gF.rgb * 1.3, scanned);
+          vec3 win = mix(tint, mix(tint, gF.rgb, 0.55), scanned);
           totalEmissiveRadiance += win * gWin * step(rnd, density) * uNight * (0.55 + 0.55 * fract(rnd * 31.0)) * (0.7 + 0.5 * fract(gCell.y)) * mix(1.0, 0.4, gTower) * mix(uWinGlow, uColorWin, uScan);
           totalEmissiveRadiance += mix(warm * 0.5, gF.rgb * 0.9, gF.a * mix(uFacadeScan, 1.0, uScan)) * (1.0 - gDetail) * density * uFacade * uNight;
           float shop = (1.0 - smoothstep(3.0, 3.5, vWall.y)) * smoothstep(0.6, 1.2, vWall.y);
@@ -341,13 +341,14 @@ export function createMaterials(field) {
         float aaY = fwidth(vRoad.y);
         float paintFade = 1.0 - smoothstep(0.12, 0.6, aaX);
         if (vRoad.z < 0.0) {
-          diffuseColor.rgb = texture(uGroundTex, vec3(vW.xz / 4.0, 4.0)).rgb;
+          diffuseColor.rgb = texture(uGroundTex, vec3(vW.xz / 5.0, 4.0)).rgb;
+        } else if (W < 4.0) {
+          // Chemins et voies de service : revêtement clair, sans bordure.
+          diffuseColor.rgb = mix(texture(uGroundTex, vec3(vW.xz / 7.0, 3.0)).rgb, vec3(0.3, 0.28, 0.24), 0.65);
         } else {
           diffuseColor.rgb = texture(uGroundTex, vec3(vW.xz / 7.0, 3.0)).rgb * (0.78 + 0.44 * fbm2(vW.xz * 0.07));
           // Usure au passage des roues, caniveau sombre le long de la bordure.
-          float tracks = 1.0 - smoothstep(0.45, 0.95, abs(fract(xm / max(halfW * 0.5, 1.0)) - 0.5) * 2.0);
-          diffuseColor.rgb *= 1.0 - 0.1 * tracks * paintFade;
-          diffuseColor.rgb *= mix(0.68, 1.0, smoothstep(0.0, 0.8, halfW - xm));
+          diffuseColor.rgb *= mix(0.8, 1.0, smoothstep(0.0, 0.6, halfW - xm));
           float ends = min(vRoad.y, vRoad.w);
           float clear = smoothstep(5.0, 10.0, ends);
           float paint = 0.0;
@@ -362,8 +363,8 @@ export function createMaterials(field) {
             paint = max(paint, (1.0 - smoothstep(0.0, 0.5, abs(ends - 1.7))) * step(xm, halfW - 0.2));
           }
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.72, 0.72, 0.7), paint * paintFade * (1.0 - smoothstep(0.5, 2.0, aaY)));
-          float curb = smoothstep(halfW - 0.2 - aaX, halfW - 0.1, xm);
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.55, 0.54, 0.51), curb * paintFade);
+          float curb = smoothstep(halfW - 0.14 - aaX, halfW - 0.08, xm);
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.34, 0.33, 0.31), curb * paintFade);
         }
         diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.5, gF.a * 0.4 * mix(uScanGround, 0.2, uScan) * (vRoad.z < 0.0 ? 1.0 : 0.12));
       `,
@@ -383,7 +384,7 @@ export function createMaterials(field) {
           }
           float lampLine = vRoad.z > 0.0 ? W * 0.5 + 1.0 : W * 0.46;
           vec2 pool = vec2((fract(vRoad.y / 27.0) - 0.5) * 27.0 / 6.0, (abs(vRoad.x) * W * 0.5 - lampLine) / 4.0);
-          totalEmissiveRadiance += vec3(1.0, 0.68, 0.4) * exp(-dot(pool, pool) * 2.0) * visible * uNight * 0.13;
+          totalEmissiveRadiance += vec3(1.0, 0.68, 0.4) * exp(-dot(pool, pool) * 2.0) * visible * uNight * 0.05;
         }
         totalEmissiveRadiance += vec3(0.4, 1.0, 0.75) * revealRing(vW.xz) * 2.0;
       `,
@@ -403,7 +404,9 @@ export function createMaterials(field) {
       fragmentHead: 'vec4 gF;',
       color: /* glsl */ `
         gF = sampleField(vW.xz);
-        diffuseColor.rgb *= 0.78 + 0.44 * vnoise(vW.xz * 0.09);
+        float patches = fbm2(vW.xz * 0.05);
+        diffuseColor.rgb *= (0.8 + 0.4 * vnoise(vW.xz * 0.09)) * texture(uGroundTex, vec3(vW.xz / 5.0, 5.0)).rgb * 2.1;
+        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.15, 1.05, 0.7), smoothstep(0.45, 0.75, patches) * 0.6);
         diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.45, gF.a * 0.25 * mix(uScanGround, 0.2, uScan));
       `,
       emissive: groundEmission,
@@ -464,14 +467,22 @@ export function createMaterials(field) {
       vertexHead: `attribute vec4 aInst; attribute vec2 aTree; uniform float uTime; ${FOCUS} varying float vTreeY; varying float vTone;`,
       vertexBody: `vTreeY = position.y; vTone = aTree.x;\n${TREE_V}`,
       fragmentHead: 'varying float vTreeY; varying float vTone;',
+      // Normales cassées par le bruit : la lumière tombe par touffes plutôt que sur une boule lisse.
+      normal: /* glsl */ `
+        if (vTreeY >= 0.24) {
+          vec2 q = vW.xz * 0.5 + vW.y * 0.31;
+          vec2 tuft = vec2(texture2D(uNoise, q).r, texture2D(uNoise, q.yx * 1.3 + 3.0).r) - 0.5;
+          normal = normalize(normal + (viewMatrix * vec4(tuft.x * 1.6, 0.0, tuft.y * 1.6, 0.0)).xyz);
+        }
+      `,
       color: /* glsl */ `
         if (vTreeY < 0.24) {
-          diffuseColor.rgb = vec3(0.09, 0.065, 0.045);
+          diffuseColor.rgb = vec3(0.14, 0.1, 0.07);
         } else {
-          vec3 leaf = mix(vec3(0.05, 0.13, 0.045), vec3(0.11, 0.22, 0.07), vTone);
+          vec3 leaf = mix(vec3(0.07, 0.16, 0.05), vec3(0.15, 0.27, 0.08), vTone);
           leaf = mix(leaf, vec3(0.17, 0.2, 0.07), step(0.86, vTone) * 0.6);
           float dapple = texture2D(uNoise, vW.xz * 0.28 + vW.y * 0.17).r;
-          diffuseColor.rgb = leaf * (0.62 + 0.75 * dapple) * (0.55 + 0.85 * smoothstep(0.24, 1.0, vTreeY));
+          diffuseColor.rgb = leaf * (0.7 + 0.6 * dapple) * (0.45 + 1.0 * smoothstep(0.3, 1.0, vTreeY));
         }
       `,
     },
