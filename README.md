@@ -132,7 +132,7 @@ Données cartographiques : © [OpenMapTiles](https://www.openmaptiles.org/), © 
 
 ## Démarche et usage de l'IA
 
-Le projet a été construit avec Claude Code (Anthropic), un agent qui lit le dépôt, écrit le code et lance les commandes. L'IA a écrit l'essentiel du code. Mon rôle a été de décider quoi construire, de juger le résultat et de le corriger.
+Le projet a été construit avec Claude Code (Anthropic), un agent qui lit le dépôt, écrit le code et lance les commandes. Claude a écrit le code, en reprenant surtout celui de Geogrid, que j'ai créé et que je développe depuis plusieurs mois. Mon rôle a été de décider quoi construire, de vérifier, de juger le résultat et de le corriger.
 
 ### Les choix
 
@@ -159,7 +159,7 @@ Le projet a été construit avec Claude Code (Anthropic), un agent qui lit le d�
 
 - L'agent a mesuré 15 FPS dans ses propres tests et a cherché un problème de performance. La cause était une limite qu'il avait lui-même ajoutée quand la caméra ne bouge pas. C'est mon retour sur ma machine qui l'a révélé.
 - Aucun toit en pente n'était généré, à cause d'une fonction qui élargissait les bâtiments au lieu de les réduire. Le bug n'est apparu qu'en regardant le rendu de près.
-- Les premiers ponts étaient cassés, parce que chaque tronçon d'OpenStreetMap avait ses propres rampes. Je l'ai signalé et le correctif raccorde les tronçons.
+- Les premiers ponts étaient cassés, parce que chaque tronçon d'OpenStreetMap avait ses propres rampes et que le tablier restait au sol alors que les piles montaient. Je l'ai signalé sur capture, et le correctif raccorde les tronçons et fait suivre la hauteur au tablier.
 
 ## Limites connues
 

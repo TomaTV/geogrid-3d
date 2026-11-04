@@ -195,7 +195,7 @@ export function createMaterials(field) {
       uniforms,
       vertexHead: `attribute vec2 aWall; attribute vec2 aCenter; attribute vec4 aMeta; varying vec2 vWall; varying vec4 vMeta; uniform float uTime; ${FOCUS}`,
       vertexBody: `${GROW}\nvWall = aWall; vMeta = aMeta;`,
-      fragmentHead: 'varying vec2 vWall; varying vec4 vMeta; float gWin; float gDetail; float gTower; vec2 gCell; vec4 gF;',
+      fragmentHead: 'varying vec2 vWall; varying vec4 vMeta; float gWin; float gDetail; float gTower; float gShop; float gShopRnd; vec2 gCell; vec4 gF;',
       color: /* glsl */ `
         gF = sampleField(vW.xz);
         float cellTone = vWarp.x + 0.5;
@@ -203,6 +203,8 @@ export function createMaterials(field) {
         gWin = 0.0;
         gDetail = 0.0;
         gTower = 0.0;
+        gShop = 0.0;
+        gShopRnd = 0.0;
         if (vMeta.x < 0.5) {
           float kind = fract(seed * 13.7);
           float tower = step(38.0, vMeta.z);
@@ -220,6 +222,14 @@ export function createMaterials(field) {
           float ao = mix(0.42, 1.0, smoothstep(0.0, 9.0, vWall.y));
           float coping = smoothstep(vMeta.z - 0.8, vMeta.z - 0.4, vWall.y);
           vec3 facade = mix(tint * vec3(0.46, 0.44, 0.42), tex.rgb * tint, upper);
+          float sFade = 1.0 - smoothstep(0.1, 0.5, fwidth(vWall.y));
+          float sBay = fract(vWall.x / 6.5);
+          gShopRnd = hash21(vec2(floor(vWall.x / 6.5), seed * 17.0));
+          float isShop = step(0.25, gShopRnd) * sFade;
+          gShop = isShop * smoothstep(0.03, 0.05, sBay) * smoothstep(0.97, 0.95, sBay) * step(0.5, vWall.y) * step(vWall.y, 2.85) * step(0.05, fract(sBay * 3.0));
+          facade = mix(facade, vec3(0.035, 0.045, 0.055), gShop);
+          vec3 awning = 0.2 + 0.32 * cos(6.283 * (gShopRnd * 3.0 + vec3(0.0, 0.33, 0.67)));
+          facade = mix(facade, awning, isShop * step(2.98, vWall.y) * step(vWall.y, 3.5));
           diffuseColor.rgb = facade * ao * (0.92 + 0.14 * height01) * (1.0 + 0.3 * coping);
           float pane = tex.a * upper;
           gWin = pane * gDetail;
@@ -273,12 +283,7 @@ export function createMaterials(field) {
           vec3 win = mix(tint, mix(tint, gF.rgb, 0.55), scanned);
           totalEmissiveRadiance += win * gWin * step(rnd, density) * uNight * (0.55 + 0.55 * fract(rnd * 31.0)) * (0.7 + 0.5 * fract(gCell.y)) * mix(1.0, 0.4, gTower) * mix(uWinGlow, uColorWin, uScan);
           totalEmissiveRadiance += mix(warm * 0.5, gF.rgb * 0.9, gF.a * mix(uFacadeScan, 1.0, uScan)) * (1.0 - gDetail) * density * uFacade * uNight;
-          float shop = (1.0 - smoothstep(3.0, 3.5, vWall.y)) * smoothstep(0.6, 1.2, vWall.y);
-          shop *= 1.0 - smoothstep(0.2, 0.7, fwidth(vWall.y));
-          float shopBay = fract(vWall.x / 6.5);
-          float shopRnd = hash21(vec2(floor(vWall.x / 6.5), vMeta.y * 17.0));
-          shop *= step(0.45, shopRnd) * smoothstep(0.04, 0.08, shopBay) * smoothstep(0.96, 0.92, shopBay);
-          totalEmissiveRadiance += mix(warm, vec3(1.0, 0.88, 0.72), fract(shopRnd * 7.0)) * shop * uNight * uShop * 0.6;
+          totalEmissiveRadiance += mix(warm, vec3(1.0, 0.88, 0.72), fract(gShopRnd * 7.0)) * gShop * step(0.42, gShopRnd) * (0.55 + 0.15 * vWall.y) * uNight * uShop * 0.7;
         } else {
           totalEmissiveRadiance += gF.rgb * gF.a * uScan * uColorGlow * 1.6;
           totalEmissiveRadiance += vec3(1.0, 0.68, 0.36) * gWin * step(0.55, hash21(vec2(floor(vWall.x / 4.2), vMeta.y * 41.0))) * uNight * 0.8;
@@ -344,7 +349,7 @@ export function createMaterials(field) {
           diffuseColor.rgb = texture(uGroundTex, vec3(vW.xz / 5.0, 4.0)).rgb;
         } else if (W < 4.0) {
           // Chemins et voies de service : revêtement clair, sans bordure.
-          diffuseColor.rgb = mix(texture(uGroundTex, vec3(vW.xz / 7.0, 3.0)).rgb, vec3(0.3, 0.28, 0.24), 0.65);
+          diffuseColor.rgb = vec3(0.5, 0.44, 0.34) * (0.78 + 0.44 * fbm2(vW.xz * 0.3)) * mix(0.8, 1.0, smoothstep(0.0, 0.4, halfW - xm));
         } else {
           diffuseColor.rgb = texture(uGroundTex, vec3(vW.xz / 7.0, 3.0)).rgb * (0.78 + 0.44 * fbm2(vW.xz * 0.07));
           // Usure au passage des roues, caniveau sombre le long de la bordure.
@@ -366,11 +371,11 @@ export function createMaterials(field) {
           float curb = smoothstep(halfW - 0.14 - aaX, halfW - 0.08, xm);
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.34, 0.33, 0.31), curb * paintFade);
         }
-        diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.5, gF.a * 0.4 * mix(uScanGround, 0.2, uScan) * (vRoad.z < 0.0 ? 1.0 : 0.12));
+        diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.5, gF.a * 0.4 * mix(uScanGround, 0.2, uScan) * (vRoad.z < 0.0 ? 0.5 : 0.12));
       `,
       emissive: /* glsl */ `
         totalEmissiveRadiance += vec3(0.9, 0.6, 0.3) * 0.05 * (1.0 - gF.a) * uNight;
-        totalEmissiveRadiance += gF.rgb * 0.5 * gF.a * 0.4 * uScanRoad * (vRoad.z < 0.0 ? 0.5 : 0.04);
+        totalEmissiveRadiance += gF.rgb * 0.5 * gF.a * 0.4 * uScanRoad * (vRoad.z < 0.0 ? 0.2 : 0.04);
         if (W > 3.0 && uNight > 0.0) {
           float visible = 1.0 - smoothstep(0.0, 0.5, fwidth(vRoad.y) / 8.0);
           if (vRoad.z > 0.0) {
@@ -390,7 +395,20 @@ export function createMaterials(field) {
       `,
   };
   const roads = patch(new THREE.MeshLambertMaterial(groundOpts), roadParts, 'road');
-  const bridge = patch(new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }), roadParts, 'bridge');
+  const bridge = patch(
+    new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }),
+    {
+      ...roadParts,
+      color: roadParts.color + `
+        if (vRoad.z < 0.0) {
+          vec3 stone = vec3(0.47, 0.45, 0.41) * (0.8 + 0.4 * fbm2(vW.xz * 0.25 + vW.y * 0.25));
+          diffuseColor.rgb = stone * (1.0 - 0.14 * step(0.92, fract(vW.y / 0.8)));
+        }
+      `,
+      emissive: roadParts.emissive.replace('if (W > 3.0 && uNight > 0.0)', 'if (false)').replace('uScanRoad * (vRoad.z < 0.0 ? 0.5 : 0.04)', 'uScanRoad * 0.0'),
+    },
+    'bridge',
+  );
 
   const groundEmission = /* glsl */ `
     totalEmissiveRadiance += gF.rgb * gF.a * mix(uScanGround, 0.2, uScan) * uScanGroundGlow;
@@ -404,9 +422,11 @@ export function createMaterials(field) {
       fragmentHead: 'vec4 gF;',
       color: /* glsl */ `
         gF = sampleField(vW.xz);
-        float patches = fbm2(vW.xz * 0.05);
-        diffuseColor.rgb *= (0.8 + 0.4 * vnoise(vW.xz * 0.09)) * texture(uGroundTex, vec3(vW.xz / 5.0, 5.0)).rgb * 2.1;
-        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.15, 1.05, 0.7), smoothstep(0.45, 0.75, patches) * 0.6);
+        float big = fbm2(vW.xz * 0.012);
+        float mid = fbm2(vW.xz * 0.07);
+        diffuseColor.rgb *= texture(uGroundTex, vec3(vW.xz / 3.2, 5.0)).rgb * 2.2;
+        diffuseColor.rgb *= (0.68 + 0.64 * mid) * (0.8 + 0.4 * big);
+        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.35, 1.12, 0.62), smoothstep(0.45, 0.72, big * 0.5 + mid * 0.5) * 0.75);
         diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.45, gF.a * 0.25 * mix(uScanGround, 0.2, uScan));
       `,
       emissive: groundEmission,
@@ -448,6 +468,8 @@ export function createMaterials(field) {
       emissive: /* glsl */ `
         float grazing = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.5);
         totalEmissiveRadiance += uSky * grazing * 0.55;
+        float glint = pow(clamp(vnoise(vW.xz * vec2(1.1, 0.3) + wt * 1.5), 0.0, 1.0), 12.0);
+        totalEmissiveRadiance += (vec3(0.025, 0.05, 0.085) + vec3(1.0, 0.72, 0.42) * glint * 0.5) * uNight;
         totalEmissiveRadiance += vec3(0.4, 1.0, 0.75) * revealRing(vW.xz) * 2.0;
       `,
     },
@@ -455,6 +477,10 @@ export function createMaterials(field) {
   );
 
   const TREE_V = /* glsl */ `
+    float ta = fract(aInst.x * 0.137 + aInst.y * 0.271) * 6.283;
+    float tc = cos(ta);
+    float ts = sin(ta);
+    transformed = vec3(transformed.x * tc - transformed.z * ts, transformed.y, transformed.x * ts + transformed.z * tc);
     float tg = clamp((uTime - aTree.y) / 1.1, 0.0, 1.0);
     tg = (1.0 - pow(1.0 - tg, 3.0)) * smoothstep(uFocusR, uFocusR * 0.86, length((modelMatrix * vec4(aInst.x, 0.0, aInst.y, 1.0)).xz - uFocus));
     transformed = vec3(transformed.x * aInst.z, transformed.y * aInst.w, transformed.z * aInst.z) * tg + vec3(aInst.x, 0.0, aInst.y);
@@ -465,24 +491,31 @@ export function createMaterials(field) {
       uniforms,
       warp: false,
       vertexHead: `attribute vec4 aInst; attribute vec2 aTree; uniform float uTime; ${FOCUS} varying float vTreeY; varying float vTone;`,
+      normalBody: /* glsl */ `
+        float na = fract(aInst.x * 0.137 + aInst.y * 0.271) * 6.283;
+        objectNormal = vec3(objectNormal.x * cos(na) - objectNormal.z * sin(na), objectNormal.y, objectNormal.x * sin(na) + objectNormal.z * cos(na));
+      `,
       vertexBody: `vTreeY = position.y; vTone = aTree.x;\n${TREE_V}`,
-      fragmentHead: 'varying float vTreeY; varying float vTone;',
+      fragmentHead: 'varying float vTreeY; varying float vTone; float gLeaf;',
       // Normales cassées par le bruit : la lumière tombe par touffes plutôt que sur une boule lisse.
       normal: /* glsl */ `
         if (vTreeY >= 0.24) {
-          vec2 q = vW.xz * 0.5 + vW.y * 0.31;
-          vec2 tuft = vec2(texture2D(uNoise, q).r, texture2D(uNoise, q.yx * 1.3 + 3.0).r) - 0.5;
-          normal = normalize(normal + (viewMatrix * vec4(tuft.x * 1.6, 0.0, tuft.y * 1.6, 0.0)).xyz);
+          normal = normalize(normal + (viewMatrix * vec4((gLeaf - 0.5) * 1.3, 0.0, (0.5 - gLeaf) * 1.3, 0.0)).xyz);
         }
       `,
       color: /* glsl */ `
         if (vTreeY < 0.24) {
+          gLeaf = 0.5;
           diffuseColor.rgb = vec3(0.14, 0.1, 0.07);
         } else {
           vec3 leaf = mix(vec3(0.07, 0.16, 0.05), vec3(0.15, 0.27, 0.08), vTone);
           leaf = mix(leaf, vec3(0.17, 0.2, 0.07), step(0.86, vTone) * 0.6);
-          float dapple = texture2D(uNoise, vW.xz * 0.28 + vW.y * 0.17).r;
-          diffuseColor.rgb = leaf * (0.7 + 0.6 * dapple) * (0.45 + 1.0 * smoothstep(0.3, 1.0, vTreeY));
+          // Projection sur les trois axes : le bruit ne s'étire plus sur les flancs du feuillage.
+          vec3 fn = abs(normalize(cross(dFdx(vW), dFdy(vW))));
+          fn /= fn.x + fn.y + fn.z;
+          float clump = texture2D(uNoise, vW.xz * 0.09).r * fn.y + texture2D(uNoise, vW.xy * 0.09).r * fn.z + texture2D(uNoise, vW.zy * 0.09).r * fn.x;
+          gLeaf = smoothstep(0.28, 0.72, clump);
+          diffuseColor.rgb = leaf * (0.48 + 1.0 * gLeaf) * (0.42 + 1.05 * smoothstep(0.3, 1.0, vTreeY));
         }
       `,
     },
@@ -517,7 +550,7 @@ export function createMaterials(field) {
         else if (vTone < 0.76) paintCol = vec3(0.42, 0.05, 0.045);
         if (vPart < 0.5) diffuseColor.rgb = vec3(0.012);
         else if (vPart < 1.5) diffuseColor.rgb = paintCol;
-        else if (vPart < 2.5) diffuseColor.rgb = vec3(0.05, 0.075, 0.1);
+        else if (vPart < 2.5) diffuseColor.rgb = vec3(0.04, 0.055, 0.07) + uSky * 0.22;
         else diffuseColor.rgb = vec3(0.018);
       `,
       emissive: /* glsl */ `
@@ -540,8 +573,8 @@ export function createMaterials(field) {
         transformed = vec3(position.x * aLamp.z - position.z * aLamp.w + aLamp.x, position.y, position.x * aLamp.w + position.z * aLamp.z + aLamp.y);
       `,
       fragmentHead: 'varying float vPart;',
-      color: 'diffuseColor.rgb = vec3(0.07, 0.075, 0.08);',
-      emissive: 'if (vPart > 0.5) totalEmissiveRadiance += vec3(1.0, 0.76, 0.48) * (0.1 + 3.0 * uNight);',
+      color: 'diffuseColor.rgb = vec3(0.17, 0.18, 0.19);',
+      emissive: 'if (vPart > 0.5) totalEmissiveRadiance += vec3(1.0, 0.76, 0.48) * (0.03 + 1.5 * uNight);',
     },
     'lamp',
   );

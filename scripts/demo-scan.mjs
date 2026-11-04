@@ -27,6 +27,14 @@ const smooth = (x, y) => {
   return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
 };
 
+// Poches de bons et de mauvais classements, de 450 à 900 m : c'est ce qui rend la carte lisible.
+const POCKETS = Array.from({ length: 66 }, (_, k) => ({
+  x: (hash(k, 21) * 2 - 1) * RADIUS * 1.05,
+  y: (hash(k, 22) * 2 - 1) * RADIUS * 1.05,
+  r: 450 + hash(k, 23) * 450,
+  amp: (k % 2 ? 1 : -1) * (8 + hash(k, 24) * 9),
+}));
+
 const mLat = 111320;
 const mLng = 111320 * Math.cos((CENTER.lat * Math.PI) / 180);
 const grid_data = [];
@@ -40,7 +48,8 @@ for (let row = 0; row < GRID; row++) {
     // Le rang se dégrade avec la distance, avec de larges variations par quartier.
     const quarter = smooth(x / 1500 + 5, y / 1500 + 9) * 2 - 1;
     const local = smooth(x / 800 + 2, y / 800 + 4) * 2 - 1;
-    const score = 2 + km * 3 + quarter * 8 + local * 1.5;
+    const pockets = POCKETS.reduce((s, p) => s + p.amp * Math.exp(-((x - p.x) ** 2 + (y - p.y) ** 2) / (p.r * p.r)), 0);
+    const score = 8 + km * 0.5 + quarter * 2 + local * 1.5 + pockets;
     const rank = score > 21 ? 101 : Math.max(1, Math.round(score));
     const competitors = [];
     for (let i = 0; competitors.length < 5; i++) {

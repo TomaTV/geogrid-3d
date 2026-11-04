@@ -47,22 +47,67 @@ function part(sx, sy, sz, x, y, z, id, taper = 0) {
 
 function lampGeometry() {
   return mergeGeometries([
-    part(0.14, 6.2, 0.14, 0, 3.1, 0, 0),
+    part(0.2, 6.2, 0.2, 0, 3.1, 0, 0),
     part(1.5, 0.08, 0.1, 0.7, 6.2, 0, 0),
-    part(0.55, 0.09, 0.24, 1.35, 6.13, 0, 1),
+    part(0.7, 0.1, 0.3, 1.35, 6.13, 0, 1),
   ]);
 }
 
 function carGeometry() {
-  const wheels = [[1.35, 0.82], [1.35, -0.82], [-1.35, 0.82], [-1.35, -0.82]].map(([x, z]) => part(0.62, 0.56, 0.2, x, 0.3, z, 3));
+  // Profil latéral extrudé en largeur : capot, pare-brise et coffre au lieu de boîtes.
+  const extrude = (profile, w0, w1, id) => {
+    const ys = profile.map((p) => p[1]);
+    const y0 = Math.min(...ys);
+    const y1 = Math.max(...ys);
+    const widthAt = (y) => w0 + (w1 - w0) * ((y - y0) / (y1 - y0 || 1));
+    const pos = [];
+    const nor = [];
+    const tri = (a, b, c, out) => {
+      const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+      const v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+      let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+      const l = Math.hypot(...n) || 1;
+      n = n.map((k) => k / l);
+      const flip = n[0] * out[0] + n[1] * out[1] + n[2] * out[2] < 0;
+      for (const p of flip ? [a, c, b] : [a, b, c]) pos.push(...p);
+      for (let k = 0; k < 3; k++) nor.push(...(flip ? n.map((q) => -q) : n));
+    };
+    for (let i = 0; i < profile.length; i++) {
+      const p = profile[i];
+      const q = profile[(i + 1) % profile.length];
+      const out = [q[1] - p[1], p[0] - q[0], 0];
+      const a = [p[0], p[1], widthAt(p[1])];
+      const b = [q[0], q[1], widthAt(q[1])];
+      const c = [q[0], q[1], -widthAt(q[1])];
+      const d = [p[0], p[1], -widthAt(p[1])];
+      tri(a, b, c, out);
+      tri(a, c, d, out);
+    }
+    for (const side of [1, -1]) {
+      const at = (p) => [p[0], p[1], widthAt(p[1]) * side];
+      for (let i = 1; i + 1 < profile.length; i++) tri(at(profile[0]), at(profile[i]), at(profile[i + 1]), [0, 0, side]);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nor), 3));
+    g.setAttribute('aPart', new THREE.BufferAttribute(new Float32Array(pos.length / 3).fill(id), 1));
+    g.setIndex(Array.from({ length: pos.length / 3 }, (_, i) => i));
+    return g;
+  };
+  const wheel = (x, z) => {
+    const g = new THREE.CylinderGeometry(0.31, 0.31, 0.2, 10).rotateX(Math.PI / 2).translate(x, 0.31, z);
+    g.deleteAttribute('uv');
+    g.setAttribute('aPart', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count).fill(3), 1));
+    return g;
+  };
   return mergeGeometries([
-    part(4.7, 0.02, 2.15, 0, 0.02, 0, 0),
-    part(4.3, 0.56, 1.8, 0, 0.58, 0, 1),
-    part(2.3, 0.5, 1.62, -0.25, 1.11, 0, 2, 0.26),
-    part(1.65, 0.05, 1.3, -0.25, 1.38, 0, 1),
-    ...wheels,
-    part(0.05, 0.14, 1.45, 2.16, 0.66, 0, 4),
-    part(0.05, 0.14, 1.5, -2.16, 0.7, 0, 5),
+    part(4.4, 0.02, 2.0, 0, 0.02, 0, 0),
+    extrude([[-2.2, 0.3], [2.2, 0.3], [2.22, 0.62], [1.95, 0.8], [0.9, 0.93], [-1.75, 0.99], [-2.2, 0.84]], 0.9, 0.84, 1),
+    extrude([[-1.8, 0.96], [1.0, 0.92], [0.35, 1.4], [-1.05, 1.44]], 0.8, 0.62, 2),
+    part(1.34, 0.04, 1.2, -0.35, 1.44, 0, 1),
+    wheel(1.35, 0.84), wheel(1.35, -0.84), wheel(-1.35, 0.84), wheel(-1.35, -0.84),
+    part(0.05, 0.13, 0.42, 2.2, 0.68, 0.6, 4), part(0.05, 0.13, 0.42, 2.2, 0.68, -0.6, 4),
+    part(0.05, 0.13, 0.42, -2.2, 0.76, 0.6, 5), part(0.05, 0.13, 0.42, -2.2, 0.76, -0.6, 5),
   ]);
 }
 
@@ -89,9 +134,13 @@ function treeGeometries() {
   };
   const near = mergeGeometries([
     unit(new THREE.CylinderGeometry(0.06, 0.1, 0.34, 5, 1, true), 1, 1, 1, 0, 0.17, 0),
-    blob(1, 0.86, 0.36, 0.86, 0, 0.56, 0, 1),
-    blob(1, 0.58, 0.3, 0.58, 0.34, 0.7, 0.16, 2),
-    blob(1, 0.52, 0.28, 0.52, -0.32, 0.72, -0.2, 3),
+    blob(1, 0.74, 0.34, 0.74, 0, 0.58, 0, 1),
+    blob(1, 0.46, 0.26, 0.46, 0.46, 0.56, 0.1, 2),
+    blob(1, 0.44, 0.25, 0.44, 0.1, 0.6, 0.48, 3),
+    blob(1, 0.46, 0.27, 0.46, -0.42, 0.58, 0.2, 4),
+    blob(1, 0.42, 0.25, 0.42, -0.2, 0.62, -0.44, 5),
+    blob(1, 0.44, 0.26, 0.44, 0.3, 0.64, -0.36, 6),
+    blob(1, 0.48, 0.26, 0.48, 0, 0.84, 0, 7),
   ]);
   const far = blob(0, 0.95, 0.45, 0.95, 0, 0.58, 0, 1);
   return { near, far };
@@ -430,7 +479,7 @@ export function createScanMap(container, scan, options) {
       if (e.carMesh) e.carMesh.visible = extrasOn && d < 1300;
       if (e.lampMesh) e.lampMesh.visible = extrasOn && d < 800;
       if (!e.treeMesh) continue;
-      const useNear = d < 1200;
+      const useNear = d < 900;
       const geo = useNear ? e.treeNear : e.treeFar;
       if (e.treeMesh.geometry !== geo) {
         e.treeMesh.geometry = geo;
@@ -469,7 +518,11 @@ export function createScanMap(container, scan, options) {
     if (result.green) add(groundMesh(result.green, mats.green, -60 + base, result.origin));
     if (result.water) add(groundMesh(result.water, mats.water, -55 + base, result.origin));
     if (result.roads) add(groundMesh(result.roads, mats.roads, -50 + base, result.origin));
-    if (result.bridges) add(groundMesh(result.bridges, mats.bridge, 5, result.origin));
+    if (result.bridges) {
+      const m = groundMesh(result.bridges, mats.bridge, 5, result.origin);
+      m.castShadow = true;
+      add(m);
+    }
 
     if (result.buildings) {
       const b = result.buildings;

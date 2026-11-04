@@ -555,12 +555,30 @@ function buildBridges(lines, E, unit) {
   const nor = [];
   const road = [];
   const idx = [];
-  const quad = (a, b, c, d, n, x0, along, z, rem) => {
+  const STEP = 7;
+  const H = 6;
+  const quad = (a, b, c, d, n, xs, als, z, rems) => {
     const v = pos.length / 3;
     for (const q of [a, b, c, d]) pos.push(q[0], q[1], q[2]);
-    for (let k = 0; k < 4; k++) nor.push(n[0], n[1], n[2]);
-    road.push(x0[0], along[0], z, rem[0], x0[1], along[1], z, rem[1], x0[1], along[1], z, rem[1], x0[0], along[0], z, rem[0]);
-    idx.push(v, v + 1, v + 2, v, v + 2, v + 3);
+    for (let k = 0; k < 4; k++) {
+      nor.push(n[0], n[1], n[2]);
+      road.push(xs[k], als[k], z, rems[k]);
+    }
+    const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
+    const vx = d[0] - a[0], vy = d[1] - a[1], vz = d[2] - a[2];
+    const front = (uy * vz - uz * vy) * n[0] + (uz * vx - ux * vz) * n[1] + (ux * vy - uy * vx) * n[2];
+    if (front >= 0) idx.push(v, v + 1, v + 2, v, v + 2, v + 3);
+    else idx.push(v, v + 2, v + 1, v, v + 3, v + 2);
+  };
+  const column = (px, pz, top, sx, sz, nx, nz, ux, uz, at, end, W) => {
+    const c = [[-sx, -sz], [sx, -sz], [sx, sz], [-sx, sz]].map(([a, b]) => [px + ux * a + nx * b, pz + uz * a + nz * b]);
+    const ones = [1, 1, 1, 1];
+    for (let k = 0; k < 4; k++) {
+      const p = c[k];
+      const q = c[(k + 1) % 4];
+      const el = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+      quad([p[0], 0, p[1]], [q[0], 0, q[1]], [q[0], top, q[1]], [p[0], top, p[1]], [(q[1] - p[1]) / el, 0, -(q[0] - p[0]) / el], ones, [at, at, at, at], -W, [end - at, end - at, end - at, end - at]);
+    }
   };
   const nearBorder = (p) => p[0] <= 8 || p[1] <= 8 || p[0] >= E - 8 || p[1] >= E - 8;
   // OSM découpe un pont en plusieurs tronçons : on les raccorde, sinon chaque morceau aurait ses propres rampes.
@@ -587,7 +605,6 @@ function buildBridges(lines, E, unit) {
     for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
     const start = nearBorder(l.pts[0]) ? 1000 : 0;
     const end = start + total + (nearBorder(l.pts[l.pts.length - 1]) ? 1000 : 0);
-    const H = Math.min(6, Math.max(total, 40) * 0.12);
     const hw = l.width / 2;
     const yAt = (a) => {
       const t = Math.min(1, Math.min(a, end - a) / 26);
@@ -601,38 +618,41 @@ function buildBridges(lines, E, unit) {
       const dz = b[1] - a[1];
       const len = Math.hypot(dx, dz);
       if (len < 0.01) continue;
-      const nx = -dz / len;
-      const nz = dx / len;
-      const a2 = along + len;
-      const y0 = yAt(along);
-      const y1 = yAt(a2);
-      const L = (p, y, o) => [p[0] + nx * o, y, p[1] + nz * o];
-      const rem = [end - along, end - a2];
-      quad(L(a, y0, hw), L(b, y1, hw), L(b, y1, -hw), L(a, y0, -hw), [0, 1, 0], [1, -1], [along, a2], l.width, rem);
-      for (const side of [1, -1]) {
-        const o = hw * side;
-        quad(L(a, y0 - 0.9, o), L(b, y1 - 0.9, o), L(b, y1 + 0.7, o), L(a, y0 + 0.7, o), [nx * side, 0, nz * side], [1, 1], [along, a2], -l.width, rem);
-        quad(L(a, y0 + 0.7, o), L(b, y1 + 0.7, o), L(b, y1 + 0.7, o - 0.3 * side), L(a, y0 + 0.7, o - 0.3 * side), [0, 1, 0], [1, 1], [along, a2], -l.width, rem);
-        quad(L(a, y0 + 0.7, o - 0.3 * side), L(b, y1 + 0.7, o - 0.3 * side), L(b, y1, o - 0.3 * side), L(a, y0, o - 0.3 * side), [-nx * side, 0, -nz * side], [1, 1], [along, a2], -l.width, rem);
-      }
-      // Piles tous les 30 m, sur la partie à pleine hauteur.
-      let n = Math.ceil(along / 30);
-      for (let at = n * 30; at < a2; n++, at = n * 30) {
-        const y = yAt(at) - 0.9;
-        if (y < 2) continue;
-        const px = a[0] + (dx / len) * (at - along);
-        const pz = a[1] + (dz / len) * (at - along);
-        const ux = (dx / len) * 0.8;
-        const uz = (dz / len) * 0.8;
-        const wx = nx * hw * 0.8;
-        const wz = nz * hw * 0.8;
-        const c = [[px - ux - wx, pz - uz - wz], [px + ux - wx, pz + uz - wz], [px + ux + wx, pz + uz + wz], [px - ux + wx, pz - uz + wz]];
-        for (let k = 0; k < 4; k++) {
-          const p = c[k];
-          const q = c[(k + 1) % 4];
-          const el = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
-          quad([p[0], 0, p[1]], [q[0], 0, q[1]], [q[0], y, q[1]], [p[0], y, p[1]], [(q[1] - p[1]) / el, 0, -(q[0] - p[0]) / el], [1, 1], [at, at], -l.width, [end - at, end - at]);
+      const ux = dx / len;
+      const uz = dz / len;
+      const nx = -uz;
+      const nz = ux;
+      const steps = Math.max(1, Math.ceil(len / STEP));
+      for (let s = 0; s < steps; s++) {
+        const a0 = along + (len * s) / steps;
+        const a1 = along + (len * (s + 1)) / steps;
+        const p0 = [a[0] + ux * (a0 - along), a[1] + uz * (a0 - along)];
+        const p1 = [a[0] + ux * (a1 - along), a[1] + uz * (a1 - along)];
+        const y0 = yAt(a0);
+        const y1 = yAt(a1);
+        const L = (p, y, o) => [p[0] + nx * o, y, p[1] + nz * o];
+        const als = [a0, a1, a1, a0];
+        const rem = [end - a0, end - a1, end - a1, end - a0];
+        const ones = [1, 1, 1, 1];
+        quad(L(p0, y0, hw), L(p1, y1, hw), L(p1, y1, -hw), L(p0, y0, -hw), [0, 1, 0], [1, 1, -1, -1], als, l.width, rem);
+        quad(L(p0, y0 - 0.9, hw), L(p1, y1 - 0.9, hw), L(p1, y1 - 0.9, -hw), L(p0, y0 - 0.9, -hw), [0, -1, 0], ones, als, -l.width, rem);
+        for (const side of [1, -1]) {
+          const o = hw * side;
+          const inner = o - 0.3 * side;
+          quad(L(p0, y0 - 0.9, o), L(p1, y1 - 0.9, o), L(p1, y1 + 0.85, o), L(p0, y0 + 0.85, o), [nx * side, 0, nz * side], ones, als, -l.width, rem);
+          quad(L(p0, y0 + 0.85, o), L(p1, y1 + 0.85, o), L(p1, y1 + 0.85, inner), L(p0, y0 + 0.85, inner), [0, 1, 0], ones, als, -l.width, rem);
+          quad(L(p0, y0 + 0.85, inner), L(p1, y1 + 0.85, inner), L(p1, y1, inner), L(p0, y0, inner), [-nx * side, 0, -nz * side], ones, als, -l.width, rem);
         }
+      }
+      // Piles tous les 34 m, sur la partie à pleine hauteur.
+      const a2 = along + len;
+      let n = Math.ceil(along / 34);
+      for (let at = n * 34; at < a2; n++, at = n * 34) {
+        if (yAt(at) < 3) continue;
+        const px = a[0] + ux * (at - along);
+        const pz = a[1] + uz * (at - along);
+        const top = yAt(at) - 0.9;
+        for (const side of [1, -1]) column(px + nx * hw * 0.55 * side, pz + nz * hw * 0.55 * side, top, 0.7, 0.7, nx, nz, ux, uz, at, end, l.width);
       }
       along = a2;
     }
