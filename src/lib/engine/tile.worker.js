@@ -565,13 +565,16 @@ function buildRoads(layer, E, unit, raster) {
   const pos = [];
   const road = [];
   const idx = [];
-  for (const l of lines) {
-    const hw = l.width / 2 / unit;
+  const emit = (l, width, paved) => {
+    const hw = width / 2 / unit;
     const pts = l.pts;
-    if (pts.length < 2) continue;
-    // Un tronçon coupé par le bord de la tuile ne commence pas à un carrefour : pas de passage piéton.
-    const cut = pts[0][0] <= 8 || pts[0][1] <= 8 || pts[0][0] >= E - 8 || pts[0][1] >= E - 8;
-    let along = cut ? 1000 : 0;
+    if (pts.length < 2) return;
+    // Un tronçon coupé par le bord de la tuile ne finit pas à un carrefour : pas de passage piéton de ce côté.
+    const nearBorder = (p) => p[0] <= 8 || p[1] <= 8 || p[0] >= E - 8 || p[1] >= E - 8;
+    let total = 0;
+    for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]) * unit;
+    let along = nearBorder(pts[0]) ? 1000 : 0;
+    const end = along + total + (nearBorder(pts[pts.length - 1]) ? 1000 : 0);
     const v0 = pos.length / 3;
     for (let i = 0; i < pts.length; i++) {
       const p = pts[Math.max(0, i - 1)];
@@ -595,14 +598,18 @@ function buildRoads(layer, E, unit, raster) {
       const lz = nz * hw * miter;
       if (i > 0) along += Math.hypot(c[0] - p[0], c[1] - p[1]) * unit;
       pos.push((c[0] + lx) * unit, 0, (c[1] + lz) * unit, (c[0] - lx) * unit, 0, (c[1] - lz) * unit);
-      road.push(-1, along, l.width, 1, along, l.width);
+      const z = paved ? -width : width;
+      road.push(-1, along, z, end - along, 1, along, z, end - along);
       if (i > 0) {
         const v = v0 + (i - 1) * 2;
         idx.push(v, v + 2, v + 1, v + 1, v + 2, v + 3);
       }
-      if (i > 0 && raster) raster.line(p, c, Math.max(hw, 3 / unit), 4);
+      if (i > 0 && raster && !paved) raster.line(p, c, Math.max(l.width / 2 / unit, 3 / unit), 4);
     }
-  }
+  };
+  // Tous les trottoirs d'abord, toute la chaussée ensuite : aux carrefours, le bitume recouvre les trottoirs des rues voisines.
+  for (const l of lines) if (l.width > 5) emit(l, l.width, true);
+  for (const l of lines) emit(l, l.width > 5 ? l.width - 2 * Math.min(Math.max(l.width * 0.16, 1), 2.6) : l.width, false);
   if (!idx.length) return { mesh: null, lines };
   const nor = new Float32Array(pos.length);
   for (let i = 1; i < nor.length; i += 3) nor[i] = 1;

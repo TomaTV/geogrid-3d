@@ -63,12 +63,29 @@ function treeGeometries() {
     g.translate(x, y, z);
     return g.index ? g.toNonIndexed() : g;
   };
+  // Feuillage arrondi : les normales suivent la sphère, chaque touffe est légèrement bosselée.
+  const blob = (detail, sx, sy, sz, x, y, z, seed) => {
+    const g = new THREE.IcosahedronGeometry(1, detail);
+    const p = g.attributes.position;
+    const n = g.attributes.normal;
+    for (let i = 0; i < p.count; i++) {
+      const vx = p.getX(i);
+      const vy = p.getY(i);
+      const vz = p.getZ(i);
+      n.setXYZ(i, vx, vy, vz);
+      const bump = 1 + 0.13 * Math.sin(vx * 7.3 + seed) * Math.sin(vy * 6.1 + seed * 2) * Math.sin(vz * 5.7 + seed * 3);
+      p.setXYZ(i, vx * bump * sx + x, vy * bump * sy + y, vz * bump * sz + z);
+    }
+    return g;
+  };
   const near = mergeGeometries([
     unit(new THREE.CylinderGeometry(0.05, 0.08, 0.3, 5, 1, true), 1, 1, 1, 0, 0.15, 0),
-    unit(new THREE.IcosahedronGeometry(1, 1), 0.95, 0.42, 0.95, 0, 0.56, 0),
-    unit(new THREE.IcosahedronGeometry(1, 1), 0.62, 0.32, 0.62, 0.26, 0.7, 0.18),
+    blob(1, 0.82, 0.38, 0.82, 0, 0.55, 0, 1),
+    blob(1, 0.56, 0.3, 0.56, 0.36, 0.68, 0.2, 2),
+    blob(1, 0.5, 0.26, 0.5, -0.34, 0.66, -0.16, 3),
+    blob(1, 0.44, 0.24, 0.44, 0.02, 0.8, -0.3, 4),
   ]);
-  const far = unit(new THREE.IcosahedronGeometry(1, 0), 0.95, 0.45, 0.95, 0, 0.58, 0);
+  const far = blob(1, 0.95, 0.45, 0.95, 0, 0.58, 0, 1);
   return { near, far };
 }
 
@@ -422,7 +439,7 @@ export function createScanMap(container, scan, options) {
     g.setAttribute('position', new THREE.BufferAttribute(part.pos, 3));
     g.setAttribute('normal', new THREE.BufferAttribute(part.nor, 3));
     if (part.col) g.setAttribute('color', new THREE.BufferAttribute(part.col, 3));
-    if (part.road) g.setAttribute('aRoad', new THREE.BufferAttribute(part.road, 3));
+    if (part.road) g.setAttribute('aRoad', new THREE.BufferAttribute(part.road, 4));
     g.setIndex(new THREE.BufferAttribute(part.idx, 1));
     g.computeBoundingSphere();
     for (const a of [...Object.values(g.attributes), g.index]) a.onUpload(freeAfterUpload);
@@ -860,7 +877,6 @@ export function createScanMap(container, scan, options) {
   let frames = 0;
   let fpsAt = 0;
   let last = 0;
-  let renderedAt = 0;
   let quality = 0;
   let lockQuality = false;
   const v = new THREE.Vector3();
@@ -972,13 +988,6 @@ export function createScanMap(container, scan, options) {
       refreshTiles();
     }
 
-    const busy = changed || uploads.length > 0 || now < growUntil || !introDone || keys.size > 0;
-    if (!busy && now - renderedAt < 0.066) {
-      frames = 0;
-      fpsAt = now;
-      return;
-    }
-    renderedAt = now;
     updateShadow();
     // Toujours par le composer : en rendu direct, three applique le brouillard après la conversion sRGB et il ne raccorde plus avec le ciel (ligne à l'horizon).
     bloom.enabled = quality < 2;

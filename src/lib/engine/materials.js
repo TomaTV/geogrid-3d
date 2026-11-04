@@ -267,15 +267,18 @@ export function createMaterials(field) {
           vec3 warm = vec3(1.0, 0.68, 0.36);
           float rnd = hash21(floor(gCell) + vec2(vMeta.y * 91.0, vMeta.y * 37.0));
           float rnd2 = fract(rnd * 53.7);
-          float density = 0.36 + 0.26 * gF.a;
+          float density = 0.28 + 0.1 * gF.a;
           vec3 tint = rnd2 > 0.95 ? vec3(0.68, 0.8, 1.0) : mix(vec3(1.0, 0.6, 0.28), vec3(1.0, 0.8, 0.56), fract(rnd * 17.0));
           float scanned = max(step(rnd2, gF.a * uScanWin), gF.a * uScan);
           vec3 win = mix(tint, gF.rgb * 1.3, scanned);
-          totalEmissiveRadiance += win * gWin * step(rnd, density) * uNight * (0.65 + 0.65 * fract(rnd * 31.0)) * mix(uWinGlow, uColorWin, uScan);
+          totalEmissiveRadiance += win * gWin * step(rnd, density) * uNight * (0.55 + 0.55 * fract(rnd * 31.0)) * (0.7 + 0.5 * fract(gCell.y)) * mix(uWinGlow, uColorWin, uScan);
           totalEmissiveRadiance += mix(warm * 0.5, gF.rgb * 0.9, gF.a * mix(uFacadeScan, 1.0, uScan)) * (1.0 - gDetail) * density * uFacade * uNight;
           float shop = (1.0 - smoothstep(3.0, 3.5, vWall.y)) * smoothstep(0.6, 1.2, vWall.y);
           shop *= 1.0 - smoothstep(0.2, 0.7, fwidth(vWall.y));
-          totalEmissiveRadiance += warm * shop * step(0.45, fract(floor(vWall.x * 0.14) * 0.37 + vMeta.y * 9.0)) * uNight * uShop;
+          float shopBay = fract(vWall.x / 6.5);
+          float shopRnd = hash21(vec2(floor(vWall.x / 6.5), vMeta.y * 17.0));
+          shop *= step(0.45, shopRnd) * smoothstep(0.04, 0.08, shopBay) * smoothstep(0.96, 0.92, shopBay);
+          totalEmissiveRadiance += mix(warm, vec3(1.0, 0.88, 0.72), fract(shopRnd * 7.0)) * shop * uNight * uShop * 0.6;
         } else {
           totalEmissiveRadiance += gF.rgb * gF.a * uScan * uColorGlow * 1.6;
           totalEmissiveRadiance += vec3(1.0, 0.68, 0.36) * gWin * step(0.55, hash21(vec2(floor(vWall.x / 4.2), vMeta.y * 41.0))) * uNight * 0.8;
@@ -328,51 +331,59 @@ export function createMaterials(field) {
     new THREE.MeshLambertMaterial(groundOpts),
     {
       uniforms,
-      vertexHead: 'attribute vec3 aRoad; varying vec3 vRoad;',
+      vertexHead: 'attribute vec4 aRoad; varying vec4 vRoad;',
       vertexBody: 'vRoad = aRoad;',
-      fragmentHead: 'varying vec3 vRoad; vec4 gF;',
+      fragmentHead: 'varying vec4 vRoad; vec4 gF;',
       color: /* glsl */ `
         gF = sampleField(vW.xz);
-        float halfW = vRoad.z * 0.5;
+        float W = abs(vRoad.z);
+        float halfW = W * 0.5;
         float xm = abs(vRoad.x) * halfW;
-        float walk = vRoad.z > 5.0 ? clamp(vRoad.z * 0.16, 1.0, 2.6) : 0.0;
-        float laneEdge = halfW - walk;
         float aaX = fwidth(vRoad.x) * halfW;
         float aaY = fwidth(vRoad.y);
         float paintFade = 1.0 - smoothstep(0.12, 0.6, aaX);
-        vec3 asphalt = texture(uGroundTex, vec3(vW.xz / 7.0, 3.0)).rgb * (0.82 + 0.36 * fbm2(vW.xz * 0.09));
-        vec3 pavement = texture(uGroundTex, vec3(vW.xz / 4.0, 4.0)).rgb;
-        float isWalk = walk > 0.0 ? smoothstep(laneEdge - aaX, laneEdge + aaX, xm) : 0.0;
-        diffuseColor.rgb = mix(asphalt, pavement, isWalk);
-        float curb = walk > 0.0 ? 1.0 - smoothstep(0.0, 0.16 + aaX, abs(xm - laneEdge)) : 0.0;
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.5, 0.49, 0.47), curb * paintFade);
-        float paint = 0.0;
-        if (vRoad.z >= 8.0) paint = max(paint, step(0.45, fract(vRoad.y / 9.0)) * (1.0 - smoothstep(0.08, 0.12 + aaX, xm)));
-        if (vRoad.z >= 8.0) paint = max(paint, 1.0 - smoothstep(0.07, 0.1 + aaX, abs(xm - (laneEdge - 0.35))));
-        if (vRoad.z >= 12.0) paint = max(paint, step(0.5, fract(vRoad.y / 6.0)) * (1.0 - smoothstep(0.06, 0.09 + aaX, abs(xm - laneEdge * 0.5))));
-        if (vRoad.z >= 6.0 && vRoad.z <= 16.0 && vRoad.y < 8.0) {
-          paint = max(paint, step(0.5, fract(xm / 1.1)) * step(3.0, vRoad.y) * step(xm, laneEdge - 0.2));
+        if (vRoad.z < 0.0) {
+          diffuseColor.rgb = texture(uGroundTex, vec3(vW.xz / 4.0, 4.0)).rgb;
+        } else {
+          diffuseColor.rgb = texture(uGroundTex, vec3(vW.xz / 7.0, 3.0)).rgb * (0.82 + 0.36 * fbm2(vW.xz * 0.09));
+          float ends = min(vRoad.y, vRoad.w);
+          float clear = smoothstep(5.0, 10.0, ends);
+          float paint = 0.0;
+          if (W >= 6.0) {
+            paint = max(paint, step(0.45, fract(vRoad.y / 9.0)) * (1.0 - smoothstep(0.08, 0.12 + aaX, xm)));
+            paint = max(paint, 1.0 - smoothstep(0.07, 0.1 + aaX, abs(xm - (halfW - 0.45))));
+          }
+          if (W >= 9.0) paint = max(paint, step(0.5, fract(vRoad.y / 6.0)) * (1.0 - smoothstep(0.06, 0.09 + aaX, abs(xm - halfW * 0.5))));
+          paint *= clear;
+          if (W >= 4.5 && W <= 12.0 && ends < 7.0) {
+            paint = max(paint, step(0.5, fract(xm / 1.1)) * step(2.5, ends) * step(xm, halfW - 0.2));
+          }
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.72, 0.72, 0.7), paint * paintFade * (1.0 - smoothstep(0.5, 2.0, aaY)));
+          float curb = smoothstep(halfW - 0.22 - aaX, halfW - 0.08, xm);
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.41, 0.39), curb * paintFade);
         }
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.72, 0.72, 0.7), paint * paintFade * (1.0 - smoothstep(0.5, 2.0, aaY)));
         diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.5, gF.a * 0.4 * mix(uScanGround, 0.2, uScan));
       `,
       emissive: /* glsl */ `
-        float edge = smoothstep(0.55, 0.8, abs(vRoad.x)) * (1.0 - smoothstep(0.8, 1.0, abs(vRoad.x)));
-        totalEmissiveRadiance += vec3(0.9, 0.6, 0.3) * 0.16 * (1.0 - gF.a) * (0.1 + 0.85 * edge) * uNight;
-        totalEmissiveRadiance += gF.rgb * 0.6 * gF.a * (0.1 + 0.85 * edge) * uScanRoad;
-        if (vRoad.z > 5.0 && uNight > 0.0) {
-          float side = vRoad.x > 0.0 ? 1.0 : -1.0;
-          float lane = 1.0 - smoothstep(0.1, 0.22, abs(abs(vRoad.x) - 0.38));
-          float flow = fract(vRoad.y / 38.0 + side * uTime * 0.28 + floor(vRoad.y / 400.0) * 0.37);
+        totalEmissiveRadiance += vec3(0.9, 0.6, 0.3) * 0.05 * (1.0 - gF.a) * uNight;
+        totalEmissiveRadiance += gF.rgb * 0.5 * gF.a * 0.4 * uScanRoad;
+        if (W > 3.0 && uNight > 0.0) {
           float visible = 1.0 - smoothstep(0.0, 0.5, fwidth(vRoad.y) / 8.0);
-          vec3 tone = side > 0.0 ? vec3(1.0, 0.9, 0.75) : vec3(1.0, 0.12, 0.08);
-          // De près les voitures sont en 3D : ces traînées ne servent que de loin.
-          float farOnly = smoothstep(0.35, 0.9, fwidth(vRoad.y));
-          totalEmissiveRadiance += tone * smoothstep(0.05, 0.0, abs(flow - 0.5)) * lane * visible * farOnly * uNight * 3.5;
-          float lamp = smoothstep(0.07, 0.0, abs(fract(vRoad.y / 27.0) - 0.5)) * smoothstep(0.14, 0.0, abs(abs(vRoad.x) - 0.88));
-          totalEmissiveRadiance += vec3(1.0, 0.72, 0.42) * lamp * visible * uNight * 2.6;
-          vec2 pool = vec2((fract(vRoad.y / 27.0) - 0.5) * 27.0 / 7.0, (abs(vRoad.x) * vRoad.z * 0.5 - (vRoad.z * 0.5 - 2.0)) / 5.0);
-          totalEmissiveRadiance += vec3(1.0, 0.66, 0.36) * exp(-dot(pool, pool) * 2.0) * visible * uNight * 0.22;
+          if (vRoad.z > 0.0) {
+            float side = vRoad.x > 0.0 ? 1.0 : -1.0;
+            float lane = 1.0 - smoothstep(0.12, 0.26, abs(abs(vRoad.x) - 0.5));
+            float flow = fract(vRoad.y / 38.0 + side * uTime * 0.28 + floor(vRoad.y / 400.0) * 0.37);
+            vec3 tone = side > 0.0 ? vec3(1.0, 0.9, 0.75) : vec3(1.0, 0.12, 0.08);
+            // De près les voitures sont en 3D : ces traînées ne servent que de loin.
+            float farOnly = smoothstep(0.35, 0.9, fwidth(vRoad.y));
+            totalEmissiveRadiance += tone * smoothstep(0.05, 0.0, abs(flow - 0.5)) * lane * visible * farOnly * uNight * 3.5;
+          } else {
+            float lamp = smoothstep(0.07, 0.0, abs(fract(vRoad.y / 27.0) - 0.5)) * smoothstep(0.14, 0.0, abs(abs(vRoad.x) - 0.92));
+            totalEmissiveRadiance += vec3(1.0, 0.72, 0.42) * lamp * visible * uNight * 2.2;
+          }
+          float lampLine = vRoad.z > 0.0 ? W * 0.5 + 1.0 : W * 0.46;
+          vec2 pool = vec2((fract(vRoad.y / 27.0) - 0.5) * 27.0 / 8.0, (abs(vRoad.x) * W * 0.5 - lampLine) / 6.0);
+          totalEmissiveRadiance += vec3(1.0, 0.68, 0.4) * exp(-dot(pool, pool) * 2.0) * visible * uNight * 0.3;
         }
         totalEmissiveRadiance += vec3(0.4, 1.0, 0.75) * revealRing(vW.xz) * 2.0;
       `,
@@ -449,8 +460,10 @@ export function createMaterials(field) {
         if (vTreeY < 0.24) {
           diffuseColor.rgb = vec3(0.09, 0.065, 0.045);
         } else {
-          vec3 leaf = mix(vec3(0.045, 0.11, 0.035), vec3(0.14, 0.22, 0.06), vTone);
-          diffuseColor.rgb = leaf * (0.5 + 0.85 * smoothstep(0.24, 1.0, vTreeY));
+          vec3 leaf = mix(vec3(0.07, 0.17, 0.05), vec3(0.2, 0.33, 0.09), vTone);
+          leaf = mix(leaf, vec3(0.32, 0.32, 0.09), step(0.86, vTone) * 0.6);
+          float dapple = texture2D(uNoise, vW.xz * 0.28 + vW.y * 0.17).r;
+          diffuseColor.rgb = leaf * (0.62 + 0.75 * dapple) * (0.55 + 0.85 * smoothstep(0.24, 1.0, vTreeY));
         }
       `,
     },
