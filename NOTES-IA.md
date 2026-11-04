@@ -137,3 +137,24 @@ Demande de Thomas : scintillements, eau, Standard redevenu moche, cercle visible
 - Standard : les couleurs du scan restent visibles au dézoom (Thomas les aime ainsi), ne pas les retirer.
 - Mesures dos à dos (même session, la machine varie d'une session à l'autre) : vue par défaut 164 FPS, 5,85 M, 147 appels (avant 136, 6,66 M, 168) ; un cran de dézoom 115 FPS, 8,4 M, 216 (avant 107, 7,6 M, 226) ; dézoom large 138 FPS, 7,4 M, 239 (avant ~100, 10 M, 305).
 - Impossible avec les tuiles OpenMapTiles : savoir qu'un bâtiment est une gare (pas d'attribut, d'où le point `railway/station`), auvents de quai, forme réelle des toits de halle, voies de service et aiguillages fins (beaucoup de voies sont fusionnées ou absentes au zoom 14).
+
+## Mise à jour du 2026-11-05 (troisième passe)
+
+- Clic : les volumes simples du zoom 13 n'étaient pas cliquables (seules les tuiles de zoom 14 avaient `buildingMesh`). Sélection maison (`raycast` dans `scan-map.js`) : boîtes par immeuble calculées au premier clic sur une tuile, puis triangles des seuls immeubles candidats. 8 ms au premier clic au dézoom large, 0,8 ms ensuite. Test scripté (16 clics par altitude, étape `clicktest` du script de capture) : 15, 13, 16, 14 réussites du plus près au dézoom large, les échecs tombent sur des rues.
+- Perspective aérienne : `EDGE_FOG` teint la brume vers `uSkyHorizon` du côté du soleil (`uSunXZ`), le bleu s'efface avant le rouge ; `sky.js` utilise la même couleur au ras de l'horizon. Toute modification de l'un doit suivre dans l'autre, sinon la ligne d'horizon réapparaît.
+- Occlusion cuite par sommet (`aAo`, `openness()` dans le worker) : part de bâti devant chaque bas de mur à 3, 7, 12, 18 m, lue sur la grille d'occupation remplie avec toutes les emprises avant la construction. Les détails n'ont pas l'attribut : WebGL y lit 0.
+- Façades : travées 3,2 à 4,3 m et étages 3 à 3,6 m selon la graine ; balcons filants au 2e et à l'avant-dernier étage des immeubles de pierre de plus de 14 m.
+
+### Recherche (retenu / écarté)
+
+Classement gain visuel / coût, pour un budget de ~144 FPS et moins de 6 M de triangles :
+
+- Retenu : brume colorée par le soleil et extinction par canal (Inigo Quilez, « fog », iquilezles.org/articles/fog ; Hoffman et Preetham, GDC 2002, perspective aérienne à densité constante suffisante près du sol). Quasi gratuit, gros effet en Dusk.
+- Retenu : occlusion ambiante cuite plutôt que calculée par image (forum three.js : cartes ou sommets cuits plus prévisibles et moins chers ; Sloan et al. 2013, occlusion par sommet pour bâtiments et terrain). Version adaptée : grille d'occupation 2D du worker, sans lancer de rayons.
+- Écarté : SSAO, N8AO, GTAO. Même en demi-résolution, environ 1 à 2 ms plus 1 ms de suréchantillonnage (doc N8AO, discussion three.js #31538) : 15 à 30 % du budget.
+- Écarté : ombres en cascade (three-csm de StrandedKitty, auteur de Streets GL). Chaque cascade est une passe de plus à chaque mouvement ; ici une seule carte, recalculée à l'arrêt, avec une boîte proportionnelle à la distance, donne la netteté de près.
+- Écarté : ciel et atmosphère précalculés (Bruneton et Neyret, Hillaire). Tables à générer, lourds ; Streets GL les utilise avec un rendu différé, TAA, SSAO, SSR et bloom, hors budget ici.
+- Plus tard : intérieurs simulés derrière les fenêtres (interior mapping, van Dongen 2008), utiles seulement de très près.
+
+Sources : https://wiki.openstreetmap.org/wiki/Streets_GL · https://github.com/StrandedKitty/streets-gl · https://github.com/StrandedKitty/three-csm · https://iquilezles.org/articles/fog/ · https://drivers.amd.com/developer/gdc/GDC02_HoffmanPreetham.pdf · https://www.npmjs.com/package/n8ao · https://github.com/mrdoob/three.js/pull/31538 · https://discourse.threejs.org/t/feedback-on-realistic-lighting-and-performance/91097 · https://users.cs.utah.edu/~ladislav/sloan13ambient/sloan13ambient.pdf · https://patents.google.com/patent/US10380790
+
