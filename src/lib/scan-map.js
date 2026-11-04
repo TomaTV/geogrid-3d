@@ -275,6 +275,12 @@ export function createScanMap(container, scan, options) {
     sun.userData.dir = sunDirection(p);
     scene.fog.color.set(p.fog);
     mats.uniforms.uNight.value = p.night;
+    mats.uniforms.uSkyZenith.value.set(p.zenith);
+    mats.uniforms.uSkyHorizon.value.set(p.horizon);
+    mats.uniforms.uFogCol.value.set(p.fog);
+    mats.uniforms.uSunDir.value.copy(sun.userData.dir);
+    mats.uniforms.uSunCol.value.set(p.sun);
+    mats.uniforms.uDisc.value = p.sunDisc;
     lightLandmarks(p.night);
     applyLook();
     const envScene = new THREE.Scene();

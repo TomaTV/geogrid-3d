@@ -97,6 +97,12 @@ uniform float uWinGlow;
 uniform float uRoof;
 uniform float uFacadeScan;
 uniform vec3 uSky;
+uniform vec3 uSkyZenith;
+uniform vec3 uSkyHorizon;
+uniform vec3 uFogCol;
+uniform vec3 uSunDir;
+uniform vec3 uSunCol;
+uniform float uDisc;
 uniform float uTime;
 uniform vec2 uFocus;
 uniform float uFocusR;
@@ -183,6 +189,12 @@ export function createMaterials(field) {
     uRoof: { value: 0.08 },
     uFacadeScan: { value: 0.22 },
     uSky: { value: new THREE.Color() },
+    uSkyZenith: { value: new THREE.Color() },
+    uSkyHorizon: { value: new THREE.Color() },
+    uFogCol: { value: new THREE.Color() },
+    uSunDir: { value: new THREE.Vector3(0, 1, 0) },
+    uSunCol: { value: new THREE.Color() },
+    uDisc: { value: 0 },
     uNoise: { value: noiseTexture() },
     uFacadeTex: { value: cityTextures().facade },
     uGroundTex: { value: cityTextures().ground },
@@ -451,25 +463,34 @@ export function createMaterials(field) {
     'land',
   );
 
+  // Eau : reflet du ciel (même dégradé que sky.js) par Fresnel, houle lente et large. Aucun détail plus fin
+  // que quelques mètres, et la houle s'aplatit au loin : rien ne peut scintiller.
   const water = patch(
-    new THREE.MeshStandardMaterial({ color: 0x0a2034, roughness: 0.14, metalness: 0.25, envMapIntensity: 1.6, ...groundOpts }),
+    new THREE.MeshLambertMaterial({ color: 0x0d2b38, ...groundOpts }),
     {
       uniforms,
-      normal: /* glsl */ `
-        vec2 wp = vW.xz * 0.05;
-        float wt = uTime * 0.22;
-        vec2 ripple = vec2(vnoise(wp + wt) - vnoise(wp - wt + 9.0), vnoise(wp * 1.8 - wt + 3.0) - vnoise(wp * 1.8 + wt + 5.0));
-        float closeUp = 1.0 - smoothstep(0.3, 2.5, fwidth(vW.x));
-        vec2 fineP = vW.xz * 0.45;
-        vec2 fine = vec2(vnoise(fineP + wt * 3.0) - vnoise(fineP - wt * 2.0 + 7.0), vnoise(fineP * 1.7 - wt * 3.0 + 3.0) - vnoise(fineP * 1.7 + wt * 2.0 + 5.0));
-        ripple = ripple * 0.14 + fine * 0.09 * closeUp;
-        normal = normalize(normal + (viewMatrix * vec4(ripple.x, 0.0, ripple.y, 0.0)).xyz);
-      `,
+      warp: false,
       emissive: /* glsl */ `
-        float grazing = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.5);
-        totalEmissiveRadiance += uSky * grazing * 0.55;
-        float glint = pow(clamp(vnoise(vW.xz * vec2(1.1, 0.3) + wt * 1.5), 0.0, 1.0), 12.0);
-        totalEmissiveRadiance += (vec3(0.025, 0.05, 0.085) + vec3(1.0, 0.72, 0.42) * glint * 0.5) * uNight;
+        float wt = uTime * 0.05;
+        float calm = 1.0 - smoothstep(0.8, 8.0, length(fwidth(vW.xz)));
+        vec2 wp = vW.xz / 38.0 + vec2(wt, wt * 0.6);
+        vec2 wq = vW.xz / 15.0 - vec2(wt * 1.4, -wt);
+        float a0 = vnoise(wp);
+        float a1 = vnoise(wq);
+        vec2 grad = (vec2(vnoise(wp + vec2(0.2, 0.0)), vnoise(wp + vec2(0.0, 0.2))) - a0)
+          + 0.5 * (vec2(vnoise(wq + vec2(0.2, 0.0)), vnoise(wq + vec2(0.0, 0.2))) - a1);
+        vec3 wn = normalize(vec3(-grad.x * 1.1 * calm, 1.0, -grad.y * 1.1 * calm));
+        vec3 wv = normalize(vW - cameraPosition);
+        vec3 wr = reflect(wv, wn);
+        float wh = max(wr.y, 0.0);
+        float wside = pow(max(dot(normalize(vec3(wr.x, 0.0, wr.z) + 1e-4), normalize(vec3(uSunDir.x, 0.0, uSunDir.z) + 1e-4)) * 0.5 + 0.5, 0.0), 2.5);
+        vec3 wsky = mix(mix(uFogCol, uSkyHorizon, wside), uSky, smoothstep(0.0, 0.2, wh));
+        wsky = mix(wsky, uSkyZenith, smoothstep(0.12, 0.72, wh));
+        float fres = 0.04 + 0.96 * pow(1.0 - clamp(dot(-wv, wn), 0.0, 1.0), 5.0);
+        totalEmissiveRadiance += wsky * fres;
+        float sunR = max(dot(wr, uSunDir), 0.0);
+        totalEmissiveRadiance += uSunCol * (pow(sunR, 60.0) * 0.5 + pow(sunR, 600.0) * 3.0) * uDisc * fres * 3.0;
+        totalEmissiveRadiance += vec3(1.0, 0.66, 0.36) * smoothstep(0.45, 0.8, a1) * 0.035 * uNight * calm;
         totalEmissiveRadiance += vec3(0.4, 1.0, 0.75) * revealRing(vW.xz) * 2.0;
       `,
     },
