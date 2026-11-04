@@ -17,7 +17,8 @@ const WORKERS = 2;
 const MAX_NEAR = 90;
 const FAR_ZOOM = 11;
 const NEAR_ZOOM = 14;
-const MAX_RANGE = 25000;
+const MAX_RANGE = 150000;
+const LABEL_RANGE = 30000;
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -70,9 +71,10 @@ function treeGeometries() {
 
 /** @param {any} container @param {any} scan @param {any} options */
 export function createScanMap(container, scan, options) {
-  const { onNodeSelect, onReady, onError, time = 'dusk' } = options;
+  const { onNodeSelect, onReady, onError, time = 'dusk', origin: startAt = null } = options;
   const nodes = scan.grid_data;
-  const center = [scan.longitude, scan.latitude];
+  // La projection reste juste autour de son origine : une adresse lointaine reconstruit le moteur autour d'elle.
+  const center = startAt ?? [scan.longitude, scan.latitude];
   const proj = createProjection(center[0], center[1]);
   const field = createField(nodes, proj);
   const selfNode = nodes.find((n) => n.self)?.self;
@@ -322,12 +324,13 @@ export function createScanMap(container, scan, options) {
     for (let x = fx - 1; x <= fx + 1; x++) {
       for (let y = fy - 1; y <= fy + 1; y++) {
         const [ox, oz] = proj.tileOrigin(x, y, FAR_ZOOM);
-        enqueue(FAR_ZOOM, x, y, 200000 + Math.hypot(ox + farSize / 2 - t.x, oz + farSize / 2 - t.z), () => true);
+        enqueue(FAR_ZOOM, x, y, 200000 + Math.hypot(ox + farSize / 2 - t.x, oz + farSize / 2 - t.z), () => Math.hypot(ox + farSize / 2 - controls.target.x, oz + farSize / 2 - controls.target.z) < farSize * 3);
       }
     }
     queue.sort((a, b) => a.priority - b.priority);
     for (const w of workers) if (!w.busy) launch(w);
 
+    for (const e of [...tiles.values()]) if (e.z !== NEAR_ZOOM && Math.hypot(e.cx - t.x, e.cz - t.z) > farSize * 3) dropTile(e);
     const near = [...tiles.values()].filter((e) => e.z === NEAR_ZOOM);
     // Au zoom avant, on rend la mémoire des tuiles sorties largement du cercle.
     for (const e of near) if (Math.hypot(e.cx - t.x, e.cz - t.z) > R * 1.5 + size) dropTile(e);
@@ -521,9 +524,11 @@ export function createScanMap(container, scan, options) {
     new THREE.RingGeometry(30, 33, 64).rotateX(-Math.PI / 2),
     new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, depthWrite: false, fog: false }),
   );
-  ring.position.y = 0.5;
+  const [scanX, scanZ] = proj.toWorld(scan.longitude, scan.latitude);
+  ring.position.set(scanX, 0.5, scanZ);
   scene.add(ring);
-  label('scan-center', '<span>Scan center</span>', 0, 8, 0);
+  label('scan-center', '<span>Scan center</span>', scanX, 8, scanZ);
+  if (startAt) label('scan-center', '<span>Searched address</span>', 0, 8, 0);
 
   if (businessXZ) {
     const beamGeo = new THREE.CylinderGeometry(3, 3, 420, 12, 1, true);
@@ -664,7 +669,7 @@ export function createScanMap(container, scan, options) {
   }
 
   function showLinks(info) {
-    if (!info || !businessXZ) {
+    if (!info || !businessXZ || !info.inScan) {
       arc.visible = false;
       distanceChip.hidden = true;
       return;
@@ -899,7 +904,7 @@ export function createScanMap(container, scan, options) {
 
     for (const l of labels) {
       v.copy(l.pos).project(camera);
-      const visible = !l.hidden && v.z < 1 && v.z > -1;
+      const visible = !l.hidden && v.z < 1 && v.z > -1 && camera.position.distanceTo(l.pos) < LABEL_RANGE;
       l.el.style.display = visible ? '' : 'none';
       if (visible) {
         const sx = ((v.x + 1) / 2) * container.clientWidth;

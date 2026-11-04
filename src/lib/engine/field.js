@@ -82,7 +82,8 @@ export function createField(nodes, proj) {
   const pts = nodes.map((n) => proj.toWorld(n.lng, n.lat));
   const step = medianSpacing(pts);
   // Comme les cases estimées de Geogrid : toute la zone du scan reçoit une estimation, seul le bord s'estompe.
-  const reach = Math.max(...pts.map((p) => Math.hypot(p[0], p[1]))) + 150;
+  const mid = [pts.reduce((s, p) => s + p[0], 0) / pts.length, pts.reduce((s, p) => s + p[1], 0) / pts.length];
+  const reach = Math.max(...pts.map((p) => Math.hypot(p[0] - mid[0], p[1] - mid[1]))) + 150;
   const sigma = Math.max(step * 1.6, 520);
   // Un point hors top 20 isolé au milieu de points classés ne creuse pas de trou dans la zone ; le panneau garde sa vraie valeur.
   const absentWeight = nodes.map((n, i) => {
@@ -121,7 +122,7 @@ export function createField(nodes, proj) {
     if (w === 0) return { node: ref[1], dist: ref[0], rank: null, outOfTop: false, rgb: null, conf: 0 };
     const outOfTop = unranked > ranked;
     const rank = ranked > 0 ? sum / ranked : null;
-    const t = Math.min(1, Math.max(0, (reach + 350 - Math.hypot(wx, wz)) / 700));
+    const t = Math.min(1, Math.max(0, (reach + 350 - Math.hypot(wx - mid[0], wz - mid[1])) / 700));
     return { node: ref[1], dist: ref[0], rank, outOfTop, rgb: outOfTop || rank == null ? UNRANKED_RGB : rankRgb(rank), conf: t * t * (3 - 2 * t) };
   }
 

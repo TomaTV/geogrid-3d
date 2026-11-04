@@ -1,7 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { GridSize, ScanRequest } from '../data/scan';
 import { ScanSource } from '../data/scan-source';
 import { ScanStore } from '../data/scan-store';
@@ -171,7 +171,7 @@ export class ScanNew {
   radii = [1000, 3000, 5000, 10000, 20000];
 
   form = this.fb.nonNullable.group({
-    address: ['', [Validators.required, Validators.minLength(5)]],
+    address: [inject(ActivatedRoute).snapshot.queryParamMap.get('address') ?? '', [Validators.required, Validators.minLength(5)]],
     keyword: ['', Validators.required],
     business: ['', Validators.required],
     grid: [5 as GridSize, Validators.required],

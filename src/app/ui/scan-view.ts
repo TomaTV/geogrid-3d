@@ -1,15 +1,43 @@
-import { Component, input, signal, viewChild } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Component, inject, input, signal, viewChild } from '@angular/core';
+import { RouterLink } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 import { ScanMap } from './scan-map';
 import { RankLegend } from './rank-legend';
 import { formatRank, rankColor } from '../../lib/rank-colors.js';
 
 @Component({
   selector: 'app-scan-view',
-  imports: [ScanMap, RankLegend],
+  imports: [ScanMap, RankLegend, RouterLink],
   template: `
     @if (scan(); as s) {
       <div class="relative h-dvh w-full overflow-hidden">
-        <app-scan-map #map [scan]="s" [time]="time()" [scanColors]="scanColors()" (nodeSelected)="active.set($event)" (ready)="loading.set(false)" (failed)="fail()" />
+        <app-scan-map #map [scan]="s" [time]="time()" [scanColors]="scanColors()" [origin]="origin()" (nodeSelected)="active.set($event)" (ready)="onReady()" (failed)="fail()" />
+
+        <div class="absolute left-1/2 top-4 z-30 w-[min(380px,calc(100%-200px))] -translate-x-1/2">
+          <form class="flex h-[40px] items-center gap-2 rounded-xl border border-white/[0.12] bg-[rgba(10,10,12,0.78)] px-3 backdrop-blur-2xl focus-within:border-accent/50" (submit)="search($event, q.value)">
+            <svg class="shrink-0 text-white/40" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+            <input #q class="min-w-0 flex-1 bg-transparent text-[13px] text-white outline-none placeholder:text-white/35" placeholder="Go to an address" aria-label="Go to an address" autocomplete="off" />
+            @if (searching()) { <span class="font-mono text-[10px] text-white/40">...</span> }
+          </form>
+          @if (searchError() || results().length) {
+            <div class="mt-1.5 rounded-xl border border-white/[0.12] bg-[rgba(10,10,12,0.92)] p-1.5 backdrop-blur-2xl">
+              @if (searchError(); as msg) {
+                <p class="px-2 py-1.5 text-[12px] text-white/55">{{ msg }}</p>
+              }
+              @for (r of results(); track r.place_id) {
+                <button type="button" class="pop-row !block w-full truncate text-left" (click)="goTo(r)">{{ r.display_name }}</button>
+              }
+            </div>
+          }
+          @if (place(); as p) {
+            <div class="mt-1.5 flex items-center gap-2 rounded-xl border border-white/[0.12] bg-[rgba(10,10,12,0.78)] px-3 py-2 backdrop-blur-2xl">
+              <span class="min-w-0 flex-1 truncate text-[12px] text-white/70">{{ p }}</span>
+              <a class="shrink-0 text-[12px] font-medium text-accent" routerLink="/scans/new" [queryParams]="{ address: p }">Start Mapping here</a>
+              <button type="button" class="shrink-0 cursor-pointer text-[12px] text-white/50 hover:text-white" (click)="backToScan()">Back to scan</button>
+            </div>
+          }
+        </div>
 
         <div class="pointer-events-none absolute left-4 top-[68px] z-10 max-w-[320px] sm:left-6">
           <p class="eyebrow">{{ s.keyword }}</p>
@@ -44,7 +72,7 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
             @if (a.to) {
               <a class="mt-2 inline-block font-mono text-[11px] text-accent/80 hover:text-accent" target="_blank" rel="noopener" [href]="mapsUrl(a)">Check on Google Maps &#8599;</a>
             }
-            @if (a.node.competitors?.length) {
+            @if (a.inScan && a.node.competitors?.length) {
               <div class="mt-4 border-t border-white/[0.06] pt-3">
                 <p class="eyebrow">Top results at that point</p>
                 <ul class="mt-2 space-y-1.5">
@@ -64,7 +92,7 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
         <div class="absolute left-4 top-[186px] z-10 flex w-[42px] flex-col items-center rounded-xl border border-white/10 bg-[rgba(10,10,12,0.78)] py-1 backdrop-blur-2xl sm:left-6">
           <button type="button" class="rail-btn" aria-label="Zoom in" data-tip="Zoom in" (click)="map.engine()?.zoom(0.7)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg></button>
           <button type="button" class="rail-btn" aria-label="Zoom out" data-tip="Zoom out" (click)="map.engine()?.zoom(1.4)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 12h14" /></svg></button>
-          <button type="button" class="rail-btn" aria-label="Recenter" data-tip="Recenter" (click)="map.engine()?.recenter()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM12 2v4M12 18v4M2 12h4M18 12h4" /></svg></button>
+          <button type="button" class="rail-btn" aria-label="Recenter" data-tip="Recenter" (click)="origin() ? backToScan() : map.engine()?.recenter()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM12 2v4M12 18v4M2 12h4M18 12h4" /></svg></button>
           <span class="my-1 h-px w-6 bg-white/10"></span>
           <button type="button" class="rail-btn" [class.rail-on]="time() === 'standard'" aria-label="Standard" data-tip="Standard" (click)="time.set('standard'); menu.set(null)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18V3Z" /></svg></button>
           <button type="button" class="rail-btn" [class.rail-on]="time() !== 'standard'" aria-label="Time" data-tip="Time" (click)="toggle('time')"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM12 7v5l3 2" /></svg></button>
@@ -116,12 +144,62 @@ export class ScanView {
     { id: 'night', label: 'Night' },
   ];
   private map = viewChild<ScanMap>(ScanMap);
+  private http = inject(HttpClient);
+  origin = signal<[number, number] | null>(null);
+  place = signal<string | null>(null);
+  results = signal<{ place_id: number; display_name: string; lat: string; lon: string }[]>([]);
+  searching = signal(false);
+  searchError = signal<string | null>(null);
   loading = signal(true);
   error = signal(false);
   fmt = formatRank;
   dist = (m: number) => (m >= 1000 ? (m / 1000).toFixed(1) + ' km' : m + ' m');
   color = rankColor;
 
+
+  async search(event: Event, query: string) {
+    event.preventDefault();
+    const q = query.trim();
+    this.results.set([]);
+    this.searchError.set(null);
+    if (q.length < 3) return;
+    this.searching.set(true);
+    try {
+      const found = await firstValueFrom(
+        this.http.get<{ place_id: number; display_name: string; lat: string; lon: string }[]>('https://nominatim.openstreetmap.org/search', {
+          params: { q, format: 'json', limit: 5 },
+        }),
+      );
+      this.results.set(found);
+      if (!found.length) this.searchError.set('No address found.');
+    } catch {
+      this.searchError.set('The address search is unavailable. Try again.');
+    } finally {
+      this.searching.set(false);
+    }
+  }
+
+  goTo(r: { display_name: string; lat: string; lon: string }) {
+    this.results.set([]);
+    this.active.set(null);
+    this.place.set(r.display_name);
+    this.loading.set(true);
+    this.origin.set([Number(r.lon), Number(r.lat)]);
+  }
+
+  backToScan() {
+    this.active.set(null);
+    this.place.set(null);
+    this.loading.set(true);
+    this.origin.set(null);
+  }
+
+  onReady() {
+    this.loading.set(false);
+    const engine = this.map()?.engine();
+    if (!this.shadows()) engine?.setShadows(false);
+    if (this.lowPower()) engine?.setLowPower(true);
+  }
 
   geogridUrl(id: string) {
     return 'https://geogrid.dev/dashboard/scans/' + id;
