@@ -239,9 +239,9 @@ export function createMaterials(field) {
 
   const buildingParts = {
       uniforms,
-      vertexHead: `attribute vec2 aWall; attribute vec2 aCenter; attribute vec4 aMeta; varying vec2 vWall; varying vec4 vMeta; uniform float uTime; ${FOCUS}`,
+      vertexHead: `attribute vec2 aWall; attribute vec2 aCenter; attribute vec4 aMeta; varying vec2 vWall; flat varying vec4 vMeta; uniform float uTime; ${FOCUS}`,
       vertexBody: `${GROW}\nvWall = aWall; vMeta = aMeta;`,
-      fragmentHead: 'varying vec2 vWall; varying vec4 vMeta; float gWin; float gDetail; float gTower; float gShop; float gShopRnd; vec2 gCell; vec4 gF;',
+      fragmentHead: 'varying vec2 vWall; flat varying vec4 vMeta; float gWin; float gDetail; float gTower; float gShop; float gShopRnd; vec2 gCell; vec4 gF;',
       color: /* glsl */ `
         gF = sampleField(vW.xz);
         float cellTone = vWarp.x + 0.5;
@@ -344,7 +344,7 @@ export function createMaterials(field) {
     {
       ...buildingParts,
       uniforms: { ...uniforms, uFocusR: { value: 1e9 }, uLodR: uniforms.uFocusR },
-      vertexHead: `attribute vec2 aWall; attribute vec2 aCenter; attribute vec4 aMeta; varying vec2 vWall; varying vec4 vMeta; uniform float uTime; uniform vec2 uFocus; uniform float uLodR; ${LOD}`,
+      vertexHead: `attribute vec2 aWall; attribute vec2 aCenter; attribute vec4 aMeta; varying vec2 vWall; flat varying vec4 vMeta; uniform float uTime; uniform vec2 uFocus; uniform float uLodR; ${LOD}`,
       vertexBody: `${GROW_MID}\nvWall = aWall; vMeta = aMeta;`,
     },
     'building-mid',
