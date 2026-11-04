@@ -38,9 +38,9 @@ for (let row = 0; row < GRID; row++) {
     const lng = CENTER.lng + x / mLng;
     const km = Math.hypot((lng - BUSINESS.lng) * mLng, (lat - BUSINESS.lat) * mLat) / 1000;
     // Le rang se dégrade avec la distance, avec de larges variations par quartier.
-    const quarter = smooth(x / 2100 + 5, y / 2100 + 9) * 2 - 1;
+    const quarter = smooth(x / 1500 + 5, y / 1500 + 9) * 2 - 1;
     const local = smooth(x / 800 + 2, y / 800 + 4) * 2 - 1;
-    const score = 1 + km * 2.3 + quarter * 5 + local * 1.2;
+    const score = 2 + km * 3 + quarter * 8 + local * 1.5;
     const rank = score > 21 ? 101 : Math.max(1, Math.round(score));
     const competitors = [];
     for (let i = 0; competitors.length < 5; i++) {
