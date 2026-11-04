@@ -18,6 +18,10 @@ La vue par défaut montre la ville sans colorer les immeubles : le scan se lit s
 
 ![Building colors activé : les immeubles prennent la couleur du rang estimé](docs/colors.png)
 
+À la première visite, une courte visite guidée explique les commandes.
+
+![Visite rapide affichée à la première ouverture](docs/tour.png)
+
 Un clic sur un immeuble affiche le rang estimé à cet endroit, le point mesuré le plus proche, la distance au commerce et les meilleurs résultats.
 
 ![Panneau affiché au clic sur un immeuble, avec le rang estimé et les meilleurs résultats](docs/clic.png)
@@ -51,6 +55,7 @@ Je ne l'ai pas réutilisé, pour trois raisons : c'est son propre moteur, pas un
 ## Fonctionnalités
 
 - **Ville 3D** : bâtiments, routes, eau et parcs d'OpenStreetMap, chargés autour de la caméra. Toits (tuiles, zinc, terrasses), cheminées, marquages au sol, arbres et voitures sont générés.
+- **Chargement et visite rapide** : un écran de chargement pendant la construction de la ville, puis une visite en 3 étapes la première fois (déplacement, clic sur un immeuble, modes et couleurs). Elle ne revient pas ensuite.
 - **Compteur FPS** : en bas à droite de la vue 3D.
 - **Modes d'affichage** : Standard (sombre), Real time (soleil selon l'heure et le lieu du scan), Dusk, Day et Night.
 - **Building colors** : colore les immeubles selon le rang, avec la palette de Geogrid.
@@ -118,7 +123,7 @@ Sur Vercel, json-server tourne dans une fonction (`api/collection.mjs`). Le disq
 src/
   app/
     data/     ScanStore (signaux) et ScanSource (mock ou live)
-    pages/    Explore, collection, nouveau scan, détail, à propos
+    pages/    Explore, collection, nouveau scan et détail
     ui/       Composants standalone : carte, vue du scan, carte de scan, légende
   lib/        Moteur 3D en JavaScript, sans dépendance à Angular
     scan-map.js          Rendu, caméra, chargement, sélection

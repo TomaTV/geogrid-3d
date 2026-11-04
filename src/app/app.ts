@@ -45,7 +45,6 @@ export class App {
     { path: '/', label: 'Explore' },
     { path: '/scans/new', label: 'New scan' },
     { path: '/scans', label: 'Collection' },
-    { path: '/about', label: 'About' },
   ];
   private url = toSignal(
     this.router.events.pipe(

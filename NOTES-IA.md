@@ -46,7 +46,7 @@ Apparition : les immeubles et les arbres poussent en vague depuis le centre du s
 ## App Angular
 
 - `src/app/data/` : `ScanStore` (signal privé `#scans`, lecture seule, `computed`), `ScanSource` (mock ou live).
-- `src/app/pages/` : explore (home), collection façon Scan History, wizard en 3 étapes façon Geogrid, détail, à propos.
+- `src/app/pages/` : explore (home), collection façon Scan History, wizard en 3 étapes façon Geogrid, détail.
 - `src/app/ui/scan-view.ts` : barre de gauche (zoom, recentrage, Standard, Time, Settings, Building colors), panneau de sélection, légende en bas à gauche, bouton Full scan.
 - `server/proxy.mjs` : ajoute le header `Authorization` côté serveur.
 

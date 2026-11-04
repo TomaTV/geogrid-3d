@@ -127,7 +127,23 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
         @if (error()) {
           <div class="absolute inset-0 grid place-items-center bg-bg/80"><p class="eyebrow text-red-300/80">Buildings could not be loaded</p></div>
         } @else if (loading()) {
-          <div class="pointer-events-none absolute inset-0 grid place-items-center bg-bg/70 backdrop-blur-sm"><p class="eyebrow">Building the city</p></div>
+          <div class="pointer-events-none absolute inset-0 z-40 grid place-items-center bg-bg/80 backdrop-blur-sm">
+            <div class="w-[min(280px,calc(100%-48px))] text-center">
+              <p class="eyebrow">Building the city</p>
+              <div class="load-bar mt-3"><span></span></div>
+              <p class="mt-3 text-[12px] text-white/40">Buildings, roads and trees from OpenStreetMap</p>
+            </div>
+          </div>
+        } @else if (tour() !== null) {
+          <div class="absolute bottom-6 left-1/2 z-40 w-[min(400px,calc(100%-32px))] -translate-x-1/2 rounded-2xl border border-white/[0.12] bg-[rgba(10,10,12,0.92)] p-4 backdrop-blur-2xl">
+            <p class="eyebrow">Quick tour · {{ tour()! + 1 }} / {{ tourSteps.length }}</p>
+            <p class="display mt-1.5 text-[22px]">{{ tourSteps[tour()!].title }}</p>
+            <p class="mt-1.5 text-[13px] leading-relaxed text-white/60">{{ tourSteps[tour()!].text }}</p>
+            <div class="mt-3.5 flex items-center justify-between">
+              <button type="button" class="text-[12px] text-white/40 hover:text-white/70" (click)="endTour()">Skip</button>
+              <button type="button" class="rounded-lg bg-accent/90 px-3.5 py-1.5 text-[12px] font-medium text-black hover:bg-accent" (click)="nextTour()">{{ tour() === tourSteps.length - 1 ? 'Start exploring' : 'Next' }}</button>
+            </div>
+          </div>
         }
       </div>
     }
@@ -156,6 +172,19 @@ export class ScanView {
   searchError = signal<string | null>(null);
   loading = signal(true);
   error = signal(false);
+  tour = signal<number | null>(null);
+  tourSteps = [
+    { title: 'Move around.', text: 'Drag to move, scroll to zoom, right-drag to rotate. W A S D or the arrow keys also work.' },
+    { title: 'Click a building.', text: 'You get the estimated rank at that spot, the nearest measured point and the top results there.' },
+    { title: 'Colors and time.', text: 'The rail on the left switches the time of day. The last button colors buildings by rank.' },
+  ];
+  private tourSeen = (() => {
+    try {
+      return localStorage.getItem('geogrid3d-tour') === '1';
+    } catch {
+      return false;
+    }
+  })();
   fmt = formatRank;
   dist = (m: number) => (m >= 1000 ? (m / 1000).toFixed(1) + ' km' : m + ' m');
   color = rankColor;
@@ -198,8 +227,23 @@ export class ScanView {
     this.origin.set(null);
   }
 
+  nextTour() {
+    const i = this.tour();
+    if (i === null || i >= this.tourSteps.length - 1) this.endTour();
+    else this.tour.set(i + 1);
+  }
+
+  endTour() {
+    this.tour.set(null);
+    this.tourSeen = true;
+    try {
+      localStorage.setItem('geogrid3d-tour', '1');
+    } catch {}
+  }
+
   onReady() {
     this.loading.set(false);
+    if (!this.tourSeen && this.tour() === null && !this.origin()) this.tour.set(0);
     const engine = this.map()?.engine();
     if (!this.shadows()) engine?.setShadows(false);
     if (this.lowPower()) engine?.setLowPower(true);
