@@ -35,6 +35,7 @@ L'assistant crée un scan en 3 étapes : adresse, commerce, puis taille de grill
 ## Fonctionnalités
 
 - **Ville 3D** : bâtiments, routes, eau et parcs d'OpenStreetMap, chargés autour de la caméra. Toits (tuiles, zinc, terrasses), cheminées, marquages au sol, arbres et voitures sont générés.
+- **Compteur FPS** : en bas à droite de la vue 3D.
 - **Modes d'affichage** : Standard (sombre), Real time (soleil selon l'heure et le lieu du scan), Dusk, Day et Night.
 - **Building colors** : colore les immeubles selon le rang, avec la palette de Geogrid.
 - **Recherche d'adresse** : se téléporte à n'importe quelle adresse (géocodage Nominatim), puis ouvre l'assistant avec cette adresse.

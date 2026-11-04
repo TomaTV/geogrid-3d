@@ -224,6 +224,9 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster) {
   const center = [];
   const feats = [];
   const detail = { pos: [], nor: [], wall: [], meta: [], center: [], idx: [] };
+  const skirt = { pos: [], fade: [], idx: [] };
+  // Tuiles du zoom 13 : volumes simples pour le lointain, sans toits ni détails.
+  const simple = job.z < 14;
 
   // Pan de toit : (position le long du bord, hauteur) sert au motif du matériau.
   const addSlope = (p, type, along, seed, h, delay) => {
@@ -294,7 +297,7 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster) {
     for (const poly of polygonsOf(f, E)) {
       const outer = poly[0];
       const area = Math.abs(ringArea(outer)) * unit * unit;
-      if (area < 18) continue;
+      if (area < (simple ? 40 : 18)) continue;
       let h = top;
       const r0 = hash(Math.round(outer[0][0]), Math.round(outer[0][1]));
       // Hauteur absente dans OSM : estimée depuis l'empreinte seule. Une valeur par tuile créait des zones carrées visibles.
@@ -315,7 +318,7 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster) {
       heights.push(h);
 
       const touchesBorder = poly.some((r) => r.some((p) => p[0] <= 0 || p[1] <= 0 || p[0] >= E || p[1] >= E));
-      const plain = !touchesBorder && poly.length === 1 && base === 0 && outer.length <= 80;
+      const plain = !simple && !touchesBorder && poly.length === 1 && base === 0 && outer.length <= 80;
       const sq = Math.sqrt(area);
       let eave = h;
       let inset = null;
@@ -377,6 +380,14 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster) {
           }
           wall.push(along, base, along + len, base, along + len, eave, along, eave);
           idx.push(v, v + 1, v + 2, v, v + 2, v + 3);
+          if (!simple && ring === outer) {
+            // Ombre de contact au pied du mur.
+            const s = skirt.pos.length / 3;
+            const w = 3.5;
+            skirt.pos.push(ax, 0.04, az, bx, 0.04, bz, bx + nx * w, 0.04, bz + nz * w, ax + nx * w, 0.04, az + nz * w);
+            skirt.fade.push(1, delay, 1, delay, 0, delay, 0, delay);
+            skirt.idx.push(s, s + 1, s + 2, s, s + 2, s + 3);
+          }
           along += len;
         }
       }
@@ -508,6 +519,7 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster) {
     detail: detail.idx.length
       ? { pos: new Float32Array(detail.pos), nor: new Float32Array(detail.nor), wall: new Float32Array(detail.wall), meta: new Float32Array(detail.meta), center: new Float32Array(detail.center), idx: new Uint32Array(detail.idx) }
       : null,
+    skirt: skirt.idx.length ? { pos: new Float32Array(skirt.pos), fade: new Float32Array(skirt.fade), idx: new Uint32Array(skirt.idx) } : null,
   };
 }
 
@@ -768,10 +780,14 @@ async function build(job) {
   if (near) for (const g of greens) raster.fill(g.poly[0], 2);
 
   const roadData = tile.layers.transportation ? buildRoads(tile.layers.transportation, E, unit, near ? raster : null) : { mesh: null, lines: [] };
-  const buildings = near && tile.layers.building ? buildBuildings(tile.layers.building, E, unit, ox, oz, job, raster) : null;
+  const buildings = job.z >= 13 && tile.layers.building ? buildBuildings(tile.layers.building, E, unit, ox, oz, job, raster) : null;
   const trees = near ? plantTrees(greens, roadData.lines, E, unit, ox, oz, raster, job) : null;
   const details = buildings?.detail ?? null;
-  if (buildings) delete buildings.detail;
+  const skirts = buildings?.skirt ?? null;
+  if (buildings) {
+    delete buildings.detail;
+    delete buildings.skirt;
+  }
 
   return {
     origin: [ox, oz],
@@ -781,6 +797,7 @@ async function build(job) {
     roads: roadData.mesh,
     buildings,
     details,
+    skirts,
     cars: near ? placeCars(roadData.lines, E, unit) : null,
     trees,
   };
@@ -788,7 +805,7 @@ async function build(job) {
 
 function transferables(result) {
   const out = [];
-  for (const part of [result.water, result.green, result.roads, result.buildings, result.details, result.cars, result.trees]) {
+  for (const part of [result.water, result.green, result.roads, result.buildings, result.details, result.skirts, result.cars, result.trees]) {
     if (!part) continue;
     for (const v of Object.values(part)) if (v && v.buffer) out.push(v.buffer);
   }

@@ -17,6 +17,9 @@ const WORKERS = 2;
 const MAX_NEAR = 90;
 const FAR_ZOOM = 11;
 const NEAR_ZOOM = 14;
+const MID_ZOOM = 13;
+const MAX_MID = 48;
+const FOG_SCALE = 0.62;
 const MAX_RANGE = 150000;
 const LABEL_RANGE = 30000;
 
@@ -82,10 +85,12 @@ export function createScanMap(container, scan, options) {
   const hq = /[?&]hq\b/.test(location.search);
 
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-  let dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const maxDpr = hq ? 2 : 1.5;
+  let dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
   renderer.setPixelRatio(dpr);
   renderer.setSize(container.clientWidth, container.clientHeight);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.info.autoReset = false;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.shadowMap.autoUpdate = false;
@@ -118,7 +123,7 @@ export function createScanMap(container, scan, options) {
   const hemi = new THREE.HemisphereLight(0xffffff, 0x222222, 1);
   scene.add(hemi);
 
-  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
+  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: hq ? 4 : 2 }));
   composer.setPixelRatio(dpr);
   composer.setSize(container.clientWidth, container.clientHeight);
   composer.addPass(new RenderPass(scene, camera));
@@ -144,7 +149,7 @@ export function createScanMap(container, scan, options) {
   controls.rotateSpeed = 0.55;
   controls.maxPolarAngle = THREE.MathUtils.degToRad(83);
   controls.minDistance = 35;
-  controls.maxDistance = 9000;
+  controls.maxDistance = 12000;
   controls.enableZoom = false;
   controls.target.set(0, 0, 0);
 
@@ -184,6 +189,7 @@ export function createScanMap(container, scan, options) {
     u.uWinGlow.value = p.scan.winGlow;
     u.uRoof.value = p.scan.roof;
     u.uFacadeScan.value = p.scan.facadeScan;
+    u.uSky.value.set(p.mid);
   }
 
   function applyPreset(p) {
@@ -210,6 +216,11 @@ export function createScanMap(container, scan, options) {
   const trees = treeGeometries();
   const carBase = carGeometry();
   let extrasOn = true;
+  let statFrames = 0;
+  let statAt = 0;
+  const fpsEl = document.createElement('div');
+  fpsEl.style.cssText = 'position:absolute;right:16px;bottom:30px;z-index:5;pointer-events:none;font:10.5px ui-monospace,SFMono-Regular,Menlo,monospace;color:rgba(255,255,255,0.6);text-shadow:0 1px 4px rgba(0,0,0,0.8)';
+  container.appendChild(fpsEl);
   const tiles = new Map();
   const uploads = [];
   const pendingJobs = new Map();
@@ -289,31 +300,59 @@ export function createScanMap(container, scan, options) {
   const exclude = [[...proj.toWorld(2.2945, 48.85826), 135]];
   const look = new THREE.Vector3();
   const focusTo = new THREE.Vector2();
-  const focusRadius = (dist) => (introDone ? THREE.MathUtils.clamp(dist * 2.4, 3000, 7000) : 3200);
+  const focusRadius = (dist) => (introDone ? THREE.MathUtils.clamp(dist * 1.7, 2600, 5200) : 3200);
   function refreshTiles() {
     if (!template) return;
     const t = controls.target;
     const dist = camera.position.distanceTo(t);
     const R = focusRadius(dist);
     camera.getWorldDirection(look);
+    // Seules les tuiles dans le champ se chargent ; celles déjà chargées restent pour un retour immédiat.
+    const lookLen = Math.hypot(look.x, look.z) || 1;
+    const lx = look.x / lookLen;
+    const lz = look.z / lookLen;
+    const halfFov = Math.atan(Math.tan((camera.fov * Math.PI) / 360) * camera.aspect);
+    const coneCos = Math.cos(Math.min(halfFov + 0.35, Math.PI * 0.9));
+    const inView = (mx, mz, radius) => {
+      if (!introDone || lookLen < 0.35) return true;
+      const tx = mx - camera.position.x;
+      const tz = mz - camera.position.z;
+      const d = Math.hypot(tx, tz);
+      return d < radius * 1.5 || (tx * lx + tz * lz) / d > coneCos - radius / d;
+    };
     const size = proj.tileMeters(NEAR_ZOOM);
     const [cx, cy] = proj.tileAt(t.x, t.z, NEAR_ZOOM);
     const span = Math.ceil(R / size) + 1;
     const wantedNear = new Set();
-    if (dist < 9500) {
+    if (dist < 12500) {
       for (let x = cx - span; x <= cx + span; x++) {
         for (let y = cy - span; y <= cy + span; y++) {
           const [ox, oz] = proj.tileOrigin(x, y, NEAR_ZOOM);
           const mx = ox + size / 2;
           const mz = oz + size / 2;
           const d = Math.hypot(mx - t.x, mz - t.z);
-          if (d > R + size * 0.75) continue;
+          if (d > R + size * 0.75 || !inView(mx, mz, size * 0.75)) continue;
           const key = NEAR_ZOOM + '/' + x + '/' + y;
           wantedNear.add(key);
-          const toX = mx - camera.position.x;
-          const toZ = mz - camera.position.z;
-          const facing = (toX * look.x + toZ * look.z) / (Math.hypot(toX, toZ) || 1);
-          enqueue(NEAR_ZOOM, x, y, d * (facing > 0.25 ? 1 : 2.5), () => lastWanted.has(key));
+          enqueue(NEAR_ZOOM, x, y, d, () => lastWanted.has(key));
+        }
+      }
+    }
+    const midSize = proj.tileMeters(MID_ZOOM);
+    const midR = THREE.MathUtils.clamp(dist * 4, 8000, 18000);
+    if (introDone) {
+      const [mx0, my0] = proj.tileAt(t.x, t.z, MID_ZOOM);
+      const midSpan = Math.ceil(midR / midSize) + 1;
+      for (let x = mx0 - midSpan; x <= mx0 + midSpan; x++) {
+        for (let y = my0 - midSpan; y <= my0 + midSpan; y++) {
+          const [ox, oz] = proj.tileOrigin(x, y, MID_ZOOM);
+          const mx = ox + midSize / 2;
+          const mz = oz + midSize / 2;
+          const d = Math.hypot(mx - t.x, mz - t.z);
+          if (d > midR + midSize * 0.7 || d + midSize * 0.7 < R * 0.8 || !inView(mx, mz, midSize * 0.7)) continue;
+          const key = MID_ZOOM + '/' + x + '/' + y;
+          wantedNear.add(key);
+          enqueue(MID_ZOOM, x, y, 300000 + d, () => lastWanted.has(key));
         }
       }
     }
@@ -331,12 +370,22 @@ export function createScanMap(container, scan, options) {
     for (const w of workers) if (!w.busy) launch(w);
 
     for (const e of [...tiles.values()]) if (e.z !== NEAR_ZOOM && Math.hypot(e.cx - t.x, e.cz - t.z) > farSize * 3) dropTile(e);
+    const mids = [...tiles.values()].filter((e) => e.z === MID_ZOOM);
+    for (const e of mids) {
+      const d = Math.hypot(e.cx - t.x, e.cz - t.z);
+      if (d > midR * 1.3 + midSize || d + midSize * 0.7 < R * 0.7) dropTile(e);
+    }
+    const behindFirst = (e) => Math.hypot(e.cx - t.x, e.cz - t.z) * (inView(e.cx, e.cz, size) ? 1 : 3);
+    const midsLeft = mids.filter((e) => tiles.has(e.key));
+    if (midsLeft.length > MAX_MID) {
+      midsLeft.sort((a, b) => behindFirst(b) - behindFirst(a)).slice(0, midsLeft.length - MAX_MID).forEach(dropTile);
+    }
     const near = [...tiles.values()].filter((e) => e.z === NEAR_ZOOM);
     // Au zoom avant, on rend la mémoire des tuiles sorties largement du cercle.
     for (const e of near) if (Math.hypot(e.cx - t.x, e.cz - t.z) > R * 1.5 + size) dropTile(e);
     if (near.length > MAX_NEAR) {
       near
-        .map((e) => [e, Math.hypot(e.cx - t.x, e.cz - t.z)])
+        .map((e) => [e, behindFirst(e)])
         .sort((a, b) => b[1] - a[1])
         .slice(0, near.length - MAX_NEAR)
         .forEach(([e]) => dropTile(e));
@@ -350,6 +399,8 @@ export function createScanMap(container, scan, options) {
           shadowDirty = true;
         }
       }
+      if (e.preMesh) e.preMesh.visible = d < 3000;
+      if (e.skirtMesh) e.skirtMesh.visible = extrasOn && d < 1500;
       if (e.carMesh) e.carMesh.visible = extrasOn && d < 1300;
       if (!e.treeMesh) continue;
       const useNear = d < 900;
@@ -387,7 +438,7 @@ export function createScanMap(container, scan, options) {
       scene.add(m);
       entry.meshes.push(m);
     };
-    const base = z === NEAR_ZOOM ? 0 : -30;
+    const base = z === NEAR_ZOOM ? 0 : z === MID_ZOOM ? -15 : -30;
     if (result.green) add(groundMesh(result.green, mats.green, -60 + base, result.origin));
     if (result.water) add(groundMesh(result.water, mats.water, -55 + base, result.origin));
     if (result.roads) add(groundMesh(result.roads, mats.roads, -50 + base, result.origin));
@@ -404,16 +455,26 @@ export function createScanMap(container, scan, options) {
       g.setIndex(new THREE.BufferAttribute(b.idx, 1));
       g.computeBoundingSphere();
       for (const name of ['aWall', 'aMeta', 'aCenter']) g.attributes[name].onUpload(freeAfterUpload);
-      const mesh = new THREE.Mesh(g, mats.building);
-      mesh.customDepthMaterial = mats.buildingDepth;
+      const detailed = z === NEAR_ZOOM;
+      const mesh = new THREE.Mesh(g, detailed ? mats.building : mats.buildingMid);
       mesh.position.set(result.origin[0], 0, result.origin[1]);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
       mesh.matrixAutoUpdate = false;
       mesh.updateMatrix();
       add(mesh);
-      entry.buildingMesh = mesh;
-      entry.data = { pos: b.pos, idx: b.idx, starts: b.starts, idxStarts: b.idxStarts, heights: b.heights };
+      if (detailed) {
+        mesh.customDepthMaterial = mats.buildingDepth;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        entry.buildingMesh = mesh;
+        entry.data = { pos: b.pos, idx: b.idx, starts: b.starts, idxStarts: b.idxStarts, heights: b.heights };
+        const pre = new THREE.Mesh(g, mats.buildingPre);
+        pre.position.copy(mesh.position);
+        pre.renderOrder = -150;
+        pre.matrixAutoUpdate = false;
+        pre.updateMatrix();
+        add(pre);
+        entry.preMesh = pre;
+      }
       growUntil = Math.max(growUntil, now + 3.2);
     }
     if (result.details) {
@@ -436,6 +497,23 @@ export function createScanMap(container, scan, options) {
       mesh.updateMatrix();
       add(mesh);
       entry.detailMesh = mesh;
+    }
+    if (result.skirts) {
+      const s = result.skirts;
+      for (let i = 1; i < s.fade.length; i += 2) s.fade[i] += now;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(s.pos, 3));
+      g.setAttribute('aFade', new THREE.BufferAttribute(s.fade, 2));
+      g.setIndex(new THREE.BufferAttribute(s.idx, 1));
+      g.computeBoundingSphere();
+      for (const a of [...Object.values(g.attributes), g.index]) a.onUpload(freeAfterUpload);
+      const mesh = new THREE.Mesh(g, mats.skirt);
+      mesh.position.set(result.origin[0], 0, result.origin[1]);
+      mesh.renderOrder = 10;
+      mesh.matrixAutoUpdate = false;
+      mesh.updateMatrix();
+      add(mesh);
+      entry.skirtMesh = mesh;
     }
     if (result.cars) {
       const g = new THREE.InstancedBufferGeometry();
@@ -482,7 +560,7 @@ export function createScanMap(container, scan, options) {
       entry.treeMesh = mesh;
     }
     tiles.set(key, entry);
-    shadowDirty = true;
+    if (z === NEAR_ZOOM) shadowDirty = true;
 
     if (!firstReady && z === NEAR_ZOOM) {
       firstReady = true;
@@ -498,6 +576,7 @@ export function createScanMap(container, scan, options) {
     }
     entry.treeNear?.dispose();
     entry.treeFar?.dispose();
+    if (entry.z === NEAR_ZOOM) shadowDirty = true;
     tiles.delete(entry.key);
     shadowDirty = true;
   }
@@ -881,7 +960,7 @@ export function createScanMap(container, scan, options) {
       camera.updateProjectionMatrix();
     }
     land.position.set(camera.position.x, 0, camera.position.z);
-    scene.fog.density = fogBase / Math.max(1, dist / 1500);
+    scene.fog.density = (fogBase * FOG_SCALE) / Math.max(1, dist / 1500);
     mats.uniforms.uFocus.value.lerp(focusTo.set(controls.target.x, controls.target.z), 0.04);
     mats.uniforms.uFocusR.value += (focusRadius(dist) - mats.uniforms.uFocusR.value) * 0.04;
 
@@ -900,6 +979,7 @@ export function createScanMap(container, scan, options) {
     updateShadow();
     // Toujours par le composer : en rendu direct, three applique le brouillard après la conversion sRGB et il ne raccorde plus avec le ciel (ligne à l'horizon).
     bloom.enabled = quality < 2;
+    renderer.info.reset();
     composer.render(delta);
 
     for (const l of labels) {
@@ -914,6 +994,14 @@ export function createScanMap(container, scan, options) {
     }
 
     frames++;
+    statFrames++;
+    if (now - statAt > 0.5) {
+      const fps = statFrames / (now - statAt);
+      const r = renderer.info.render;
+      fpsEl.textContent = Math.round(fps) + ' FPS · ' + (1000 / fps).toFixed(1) + ' ms · ' + (r.triangles / 1e6).toFixed(2) + ' M tris · ' + r.calls + ' calls';
+      statFrames = 0;
+      statAt = now;
+    }
     if (now - fpsAt > 2.5) {
       const fps = frames / (now - fpsAt);
       frames = 0;
@@ -975,12 +1063,13 @@ export function createScanMap(container, scan, options) {
       quality = on ? 4 : 0;
       extrasOn = !on;
       lockQuality = on;
-      dpr = on ? 0.8 : Math.min(window.devicePixelRatio || 1, 2);
+      dpr = on ? 0.8 : Math.min(window.devicePixelRatio || 1, maxDpr);
       renderer.setPixelRatio(dpr);
       composer.setPixelRatio(dpr);
     },
     destroy() {
       destroyed = true;
+      fpsEl.remove();
       clearInterval(liveTimer);
       cancelAnimationFrame(raf);
       resize.disconnect();

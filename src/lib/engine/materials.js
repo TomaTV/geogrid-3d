@@ -17,6 +17,61 @@ float fbm2(vec2 p) {
 }
 `;
 
+// Bruit précalculé : une lecture de texture coûte bien moins que le calculer à chaque pixel.
+const NOISE_FRAG = /* glsl */ `
+uniform sampler2D uNoise;
+float hash21(vec2 p) {
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+float vnoise(vec2 p) {
+  return texture2D(uNoise, p * 0.0625).r;
+}
+float fbm2(vec2 p) {
+  return texture2D(uNoise, p * 0.0625).r;
+}
+`;
+
+function noiseTexture() {
+  const SIZE = 256;
+  const rnd = (x, y, n) => {
+    const s = Math.sin(((x % n) + n) % n * 127.1 + (((y % n) + n) % n) * 311.7) * 43758.5453;
+    return s - Math.floor(s);
+  };
+  const vn = (x, y, n) => {
+    const ix = Math.floor(x);
+    const iy = Math.floor(y);
+    const fx = x - ix;
+    const fy = y - iy;
+    const u = fx * fx * (3 - 2 * fx);
+    const v = fy * fy * (3 - 2 * fy);
+    const a = rnd(ix, iy, n);
+    const b = rnd(ix + 1, iy, n);
+    const c = rnd(ix, iy + 1, n);
+    const d = rnd(ix + 1, iy + 1, n);
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+  };
+  const data = new Uint8Array(SIZE * SIZE * 4);
+  for (let j = 0; j < SIZE; j++) {
+    for (let i = 0; i < SIZE; i++) {
+      const x = (i / SIZE) * 16;
+      const y = (j / SIZE) * 16;
+      const v = vn(x, y, 16) * 0.65 + vn(x * 2, y * 2, 32) * 0.35;
+      const k = (j * SIZE + i) * 4;
+      data[k] = data[k + 1] = data[k + 2] = v * 255;
+      data[k + 3] = 255;
+    }
+  }
+  const t = new THREE.DataTexture(data, SIZE, SIZE, THREE.RGBAFormat);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.magFilter = THREE.LinearFilter;
+  t.generateMipmaps = true;
+  t.needsUpdate = true;
+  return t;
+}
+
 const FIELD = /* glsl */ `
 varying vec2 vWarp;
 uniform sampler2D uField;
@@ -38,6 +93,7 @@ uniform float uShop;
 uniform float uWinGlow;
 uniform float uRoof;
 uniform float uFacadeScan;
+uniform vec3 uSky;
 uniform float uTime;
 uniform vec2 uFocus;
 uniform float uFocusR;
@@ -64,7 +120,7 @@ function patch(material, { uniforms, warp = true, vertexHead = '', normalBody = 
         `#include <begin_vertex>\n${vertexBody}\nvW = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWarp = ${warp ? 'vec2(vnoise(vW.xz / 55.0) - 0.5, 0.0)' : 'vec2(0.0)'};`,
       );
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying vec3 vW;\n${NOISE}\n${FIELD}\n${fragmentHead}`)
+      .replace('#include <common>', `#include <common>\nvarying vec3 vW;\n${NOISE_FRAG}\n${FIELD}\n${fragmentHead}`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${color}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${normal}`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${emissive}`);
@@ -93,6 +149,14 @@ if (rim <= 0.0) transformed = vec3(aCenter.x, 0.0, aCenter.y);
 else transformed.y *= max(grow, 0.002);
 `;
 const FOCUS = 'uniform vec2 uFocus; uniform float uFocusR;';
+// Lointain : apparaît là où les immeubles détaillés s'arrêtent.
+const GROW_MID = /* glsl */ `
+float rim = smoothstep(uLodR * 0.86, uLodR, length((modelMatrix * vec4(aCenter.x, 0.0, aCenter.y, 1.0)).xz - uFocus));
+float grow = clamp((uTime - aMeta.w) / 1.3, 0.0, 1.0);
+grow = (1.0 - pow(1.0 - grow, 3.0)) * rim;
+if (rim <= 0.0) transformed = vec3(aCenter.x, 0.0, aCenter.y);
+else transformed.y *= max(grow, 0.002);
+`;
 
 export function createMaterials(field) {
   const uniforms = {
@@ -115,27 +179,29 @@ export function createMaterials(field) {
     uWinGlow: { value: 1.25 },
     uRoof: { value: 0.08 },
     uFacadeScan: { value: 0.22 },
+    uSky: { value: new THREE.Color() },
+    uNoise: { value: noiseTexture() },
     uTime: { value: 0 },
     uFocus: { value: new THREE.Vector2() },
     uFocusR: { value: 5000 },
   };
 
-  const building = patch(
-    new THREE.MeshLambertMaterial(),
-    {
+  const buildingParts = {
       uniforms,
       vertexHead: `attribute vec2 aWall; attribute vec2 aCenter; attribute vec4 aMeta; varying vec2 vWall; varying vec4 vMeta; uniform float uTime; ${FOCUS}`,
       vertexBody: `${GROW}\nvWall = aWall; vMeta = aMeta;`,
-      fragmentHead: 'varying vec2 vWall; varying vec4 vMeta; float gWin; float gDetail; vec2 gCell; vec4 gF;',
+      fragmentHead: 'varying vec2 vWall; varying vec4 vMeta; float gWin; float gDetail; float gTower; vec2 gCell; vec4 gF;',
       color: /* glsl */ `
         gF = sampleField(vW.xz);
         float cellTone = vWarp.x + 0.5;
         float seed = vMeta.y;
         gWin = 0.0;
         gDetail = 0.0;
+        gTower = 0.0;
         if (vMeta.x < 0.5) {
           float kind = fract(seed * 13.7);
           float tower = step(38.0, vMeta.z);
+          gTower = tower;
           vec3 stone = mix(vec3(0.62, 0.55, 0.44), vec3(0.77, 0.72, 0.63), fract(seed * 7.3 + cellTone));
           stone = mix(stone, vec3(0.52, 0.53, 0.55), step(0.66, kind) * step(kind, 0.84));
           stone = mix(stone, vec3(0.50, 0.32, 0.25), step(0.84, kind));
@@ -214,6 +280,8 @@ export function createMaterials(field) {
         if (uScan > 0.5) totalEmissiveRadiance += gF.rgb * smoothstep(0.03, 0.55, gF.a) * uColorGlow;
         if (vMeta.x < 0.5 && uScan < 0.5) totalEmissiveRadiance += gF.rgb * gF.a * (1.0 - smoothstep(0.0, 13.0, vWall.y)) * uScanWall;
         if (vMeta.x < 0.5) {
+          float fresnel = pow(1.0 - clamp(abs(dot(normal, normalize(vViewPosition))), 0.0, 1.0), 3.0);
+          totalEmissiveRadiance += uSky * gWin * fresnel * mix(0.35, 0.9, gTower);
           vec3 warm = vec3(1.0, 0.68, 0.36);
           float rnd = hash21(floor(gCell) + vec2(vMeta.y * 91.0, vMeta.y * 37.0));
           float rnd2 = fract(rnd * 53.7);
@@ -232,12 +300,47 @@ export function createMaterials(field) {
         }
         totalEmissiveRadiance += vec3(0.4, 1.0, 0.75) * revealRing(vW.xz) * 2.0;
       `,
+  };
+  const building = patch(new THREE.MeshLambertMaterial(), buildingParts, 'building');
+  const buildingMid = patch(
+    new THREE.MeshLambertMaterial(),
+    {
+      ...buildingParts,
+      uniforms: { ...uniforms, uFocusR: { value: 1e9 }, uLodR: uniforms.uFocusR },
+      vertexHead: 'attribute vec2 aWall; attribute vec2 aCenter; attribute vec4 aMeta; varying vec2 vWall; varying vec4 vMeta; uniform float uTime; uniform vec2 uFocus; uniform float uLodR;',
+      vertexBody: `${GROW_MID}\nvWall = aWall; vMeta = aMeta;`,
     },
-    'building',
+    'building-mid',
   );
+  const skirt = new THREE.ShaderMaterial({
+    uniforms: { uTime: uniforms.uTime },
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    vertexShader: /* glsl */ `
+      attribute vec2 aFade;
+      uniform float uTime;
+      varying float vA;
+      void main() {
+        vA = aFade.x * aFade.x * clamp((uTime - aFade.y) / 1.3, 0.0, 1.0);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: 'varying float vA; void main() { gl_FragColor = vec4(0.0, 0.0, 0.0, vA * 0.42); }',
+  });
+  // Pré-passe : la profondeur d'abord, pour que le matériau des façades ne colore que les pixels visibles.
+  const buildingPre = new THREE.MeshBasicMaterial({ colorWrite: false });
+  buildingPre.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', `#include <common>\nattribute vec2 aCenter; attribute vec4 aMeta; uniform float uTime; ${FOCUS}`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${GROW}`);
+  };
+  buildingPre.customProgramCacheKey = () => 'building-pre';
   const buildingDepth = depthPatch(uniforms, `attribute vec2 aCenter; attribute vec4 aMeta; uniform float uTime; ${FOCUS}`, GROW, 'building-depth');
 
-  const groundOpts = { depthTest: false, depthWrite: false };
+  // Le sol teste la profondeur : après la pré-passe, il ne calcule plus les pixels cachés par un immeuble.
+  const groundOpts = { depthTest: true, depthWrite: false };
 
   const roads = patch(
     new THREE.MeshLambertMaterial(groundOpts),
@@ -287,6 +390,8 @@ export function createMaterials(field) {
           totalEmissiveRadiance += tone * smoothstep(0.05, 0.0, abs(flow - 0.5)) * lane * visible * farOnly * uNight * 3.5;
           float lamp = smoothstep(0.07, 0.0, abs(fract(vRoad.y / 27.0) - 0.5)) * smoothstep(0.14, 0.0, abs(abs(vRoad.x) - 0.88));
           totalEmissiveRadiance += vec3(1.0, 0.72, 0.42) * lamp * visible * uNight * 2.6;
+          vec2 pool = vec2((fract(vRoad.y / 27.0) - 0.5) * 27.0 / 7.0, (abs(vRoad.x) * vRoad.z * 0.5 - (vRoad.z * 0.5 - 2.0)) / 5.0);
+          totalEmissiveRadiance += vec3(1.0, 0.66, 0.36) * exp(-dot(pool, pool) * 2.0) * visible * uNight * 0.22;
         }
         totalEmissiveRadiance += vec3(0.4, 1.0, 0.75) * revealRing(vW.xz) * 2.0;
       `,
@@ -410,5 +515,5 @@ export function createMaterials(field) {
     'car',
   );
 
-  return { uniforms, building, buildingDepth, roads, green, land, water, tree, treeDepth, car };
+  return { uniforms, building, buildingMid, buildingPre, skirt, buildingDepth, roads, green, land, water, tree, treeDepth, car };
 }
