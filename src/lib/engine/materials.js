@@ -53,11 +53,12 @@ float revealRing(vec2 xz) {
 }
 `;
 
-function patch(material, { uniforms, warp = true, vertexHead = '', vertexBody = '', fragmentHead = '', color = '', emissive = '', normal = '' }, key) {
+function patch(material, { uniforms, warp = true, vertexHead = '', normalBody = '', vertexBody = '', fragmentHead = '', color = '', emissive = '', normal = '' }, key) {
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\nvarying vec3 vW;\nvarying vec2 vWarp;\n${warp ? NOISE : ''}\n${vertexHead}`)
+      .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>\n${normalBody}`)
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>\n${vertexBody}\nvW = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWarp = ${warp ? 'vec2(vnoise(vW.xz / 55.0) - 0.5, 0.0)' : 'vec2(0.0)'};`,
@@ -164,15 +165,44 @@ export function createMaterials(field) {
           diffuseColor.rgb = stone * ao * (1.0 - 0.22 * cornice) * (1.0 - 0.55 * balcony) * mix(1.0, 0.68, storey) * (0.9 + 0.16 * height01);
           diffuseColor.rgb *= mix(0.8, 1.0, gDetail) * (1.0 - 0.16 * farFloors) * (1.0 + 0.35 * coping);
           vec3 glass = mix(vec3(0.16, 0.2, 0.25), vec3(0.24, 0.36, 0.46), tower);
+          glass *= (0.78 + 0.4 * hash21(floor(gCell) + seed * 37.0)) * mix(0.55, 1.0, smoothstep(0.84, 0.62, fract(gCell.y)));
           diffuseColor.rgb = mix(diffuseColor.rgb, mix(glass, vec3(0.02, 0.025, 0.035), smoothstep(0.0, 0.4, uNight)), gWin);
         } else {
-          vec3 zinc = mix(vec3(0.17, 0.2, 0.24), vec3(0.3, 0.31, 0.33), fract(seed * 5.1 + cellTone * 0.6));
-          float roofKind = fract(seed * 11.3);
-          zinc = mix(zinc, vec3(0.38, 0.38, 0.36), step(0.6, roofKind) * step(roofKind, 0.82));
-          zinc = mix(zinc, vec3(0.38, 0.25, 0.2), step(0.82, roofKind));
-          float grain = hash21(floor(vW.xz * 0.5)) - 0.5;
-          zinc *= 1.0 + 0.16 * grain * (1.0 - smoothstep(0.2, 0.8, fwidth(vW.x * 0.5)));
-          diffuseColor.rgb = mix(zinc, gF.rgb, gF.a * uRoof);
+          float tone = fract(seed * 5.1 + cellTone * 0.6);
+          float fine = 1.0 - smoothstep(0.15, 0.6, fwidth(vW.x) * 2.0);
+          vec3 roof;
+          if (vMeta.x < 1.5) {
+            // Toit-terrasse : gravier et reprises d'étanchéité.
+            roof = mix(vec3(0.3, 0.29, 0.27), vec3(0.42, 0.41, 0.38), tone);
+            roof *= 0.86 + 0.28 * fbm2(vW.xz * 0.11);
+            roof *= 1.0 + 0.05 * (hash21(floor(vW.xz * 2.0)) - 0.5) * fine;
+          } else if (vMeta.x < 2.5) {
+            // Tuiles : rangs horizontaux, légère variation d'une tuile à l'autre.
+            float kind = fract(seed * 11.3);
+            roof = mix(vec3(0.46, 0.22, 0.14), vec3(0.56, 0.32, 0.2), tone);
+            roof = mix(roof, vec3(0.2, 0.21, 0.24), step(0.72, kind));
+            float row = vWall.y / 0.36;
+            float rows = 1.0 - smoothstep(0.3, 0.8, fwidth(row));
+            float course = smoothstep(0.0, 0.22, fract(row));
+            float piece = hash21(vec2(floor(vWall.x / 0.45 + floor(row) * 0.5), floor(row)));
+            roof *= mix(1.0, (0.72 + 0.28 * course) * (0.88 + 0.24 * piece), rows);
+            roof *= 0.9 + 0.2 * fbm2(vW.xz * 0.2);
+          } else if (vMeta.x < 3.5) {
+            // Zinc parisien : joints debout et lucarnes.
+            roof = mix(vec3(0.3, 0.34, 0.39), vec3(0.4, 0.43, 0.47), tone);
+            float seam = fract(vWall.x / 0.85);
+            float seams = 1.0 - smoothstep(0.15, 0.5, fwidth(vWall.x / 0.85));
+            roof *= mix(1.0, 0.8 + 0.2 * smoothstep(0.0, 0.1, seam), seams);
+            vec2 d = vec2(fract(vWall.x / 4.2), (vWall.y - (vMeta.z - 2.5)) / 1.3);
+            gWin = step(0.36, d.x) * step(d.x, 0.64) * step(0.0, d.y) * step(d.y, 1.0) * (1.0 - smoothstep(0.1, 0.4, fwidth(vWall.x / 4.2) * 4.0));
+            roof = mix(roof, vec3(0.05, 0.06, 0.08), gWin);
+          } else if (vMeta.x < 4.5) {
+            // Cheminées en brique ou plâtre, équipements en métal.
+            roof = mix(vec3(0.5, 0.3, 0.24), vec3(0.62, 0.6, 0.56), step(0.5, fract(seed * 3.7)));
+          } else {
+            roof = vec3(0.58, 0.56, 0.52);
+          }
+          diffuseColor.rgb = mix(roof, gF.rgb, gF.a * uRoof);
         }
         if (uScan > 0.5) {
           float relief = clamp(dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11)) / (vMeta.x < 0.5 ? 0.5 : 0.28), 0.6, 1.25);
@@ -198,6 +228,7 @@ export function createMaterials(field) {
           totalEmissiveRadiance += warm * shop * step(0.45, fract(floor(vWall.x * 0.14) * 0.37 + vMeta.y * 9.0)) * uNight * uShop;
         } else {
           totalEmissiveRadiance += gF.rgb * gF.a * uScan * uColorGlow * 1.6;
+          totalEmissiveRadiance += vec3(1.0, 0.68, 0.36) * gWin * step(0.55, hash21(vec2(floor(vWall.x / 4.2), vMeta.y * 41.0))) * uNight * 0.8;
         }
         totalEmissiveRadiance += vec3(0.4, 1.0, 0.75) * revealRing(vW.xz) * 2.0;
       `,
@@ -217,11 +248,28 @@ export function createMaterials(field) {
       fragmentHead: 'varying vec3 vRoad; vec4 gF;',
       color: /* glsl */ `
         gF = sampleField(vW.xz);
-        float across = abs(vRoad.x);
-        float kerb = smoothstep(0.78, 0.84, across);
-        diffuseColor.rgb = mix(vec3(0.05, 0.052, 0.057), vec3(0.2, 0.19, 0.18), vRoad.z > 5.0 ? kerb : 0.0);
-        float dash = step(0.5, fract(vRoad.y / 7.0)) * (1.0 - smoothstep(0.015, 0.04, across)) * step(7.0, vRoad.z);
-        diffuseColor.rgb += dash * 0.3;
+        float halfW = vRoad.z * 0.5;
+        float xm = abs(vRoad.x) * halfW;
+        float walk = vRoad.z > 5.0 ? clamp(vRoad.z * 0.16, 1.0, 2.6) : 0.0;
+        float laneEdge = halfW - walk;
+        float aaX = fwidth(vRoad.x) * halfW;
+        float aaY = fwidth(vRoad.y);
+        float paintFade = 1.0 - smoothstep(0.12, 0.6, aaX);
+        vec3 asphalt = vec3(0.095, 0.097, 0.102) * (0.82 + 0.36 * fbm2(vW.xz * 0.09));
+        asphalt *= 1.0 + 0.12 * (hash21(floor(vW.xz * 3.0)) - 0.5) * (1.0 - smoothstep(0.05, 0.25, aaX));
+        vec3 pavement = vec3(0.34, 0.33, 0.31) * (0.9 + 0.2 * fbm2(vW.xz * 0.4));
+        float isWalk = walk > 0.0 ? smoothstep(laneEdge - aaX, laneEdge + aaX, xm) : 0.0;
+        diffuseColor.rgb = mix(asphalt, pavement, isWalk);
+        float curb = walk > 0.0 ? 1.0 - smoothstep(0.0, 0.16 + aaX, abs(xm - laneEdge)) : 0.0;
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.5, 0.49, 0.47), curb * paintFade);
+        float paint = 0.0;
+        if (vRoad.z >= 8.0) paint = max(paint, step(0.45, fract(vRoad.y / 9.0)) * (1.0 - smoothstep(0.08, 0.12 + aaX, xm)));
+        if (vRoad.z >= 8.0) paint = max(paint, 1.0 - smoothstep(0.07, 0.1 + aaX, abs(xm - (laneEdge - 0.35))));
+        if (vRoad.z >= 12.0) paint = max(paint, step(0.5, fract(vRoad.y / 6.0)) * (1.0 - smoothstep(0.06, 0.09 + aaX, abs(xm - laneEdge * 0.5))));
+        if (vRoad.z >= 6.0 && vRoad.z <= 16.0 && vRoad.y < 8.0) {
+          paint = max(paint, step(0.5, fract(xm / 1.1)) * step(3.0, vRoad.y) * step(xm, laneEdge - 0.2));
+        }
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.72, 0.72, 0.7), paint * paintFade * (1.0 - smoothstep(0.5, 2.0, aaY)));
         diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.5, gF.a * 0.4 * mix(uScanGround, 0.2, uScan));
       `,
       emissive: /* glsl */ `
@@ -234,7 +282,9 @@ export function createMaterials(field) {
           float flow = fract(vRoad.y / 38.0 + side * uTime * 0.28 + floor(vRoad.y / 400.0) * 0.37);
           float visible = 1.0 - smoothstep(0.0, 0.5, fwidth(vRoad.y) / 8.0);
           vec3 tone = side > 0.0 ? vec3(1.0, 0.9, 0.75) : vec3(1.0, 0.12, 0.08);
-          totalEmissiveRadiance += tone * smoothstep(0.05, 0.0, abs(flow - 0.5)) * lane * visible * uNight * 3.5;
+          // De près les voitures sont en 3D : ces traînées ne servent que de loin.
+          float farOnly = smoothstep(0.35, 0.9, fwidth(vRoad.y));
+          totalEmissiveRadiance += tone * smoothstep(0.05, 0.0, abs(flow - 0.5)) * lane * visible * farOnly * uNight * 3.5;
           float lamp = smoothstep(0.07, 0.0, abs(fract(vRoad.y / 27.0) - 0.5)) * smoothstep(0.14, 0.0, abs(abs(vRoad.x) - 0.88));
           totalEmissiveRadiance += vec3(1.0, 0.72, 0.42) * lamp * visible * uNight * 2.6;
         }
@@ -272,6 +322,8 @@ export function createMaterials(field) {
       fragmentHead: 'vec4 gF;',
       color: /* glsl */ `
         gF = sampleField(vW.xz);
+        vec3 ground = vec3(0.3, 0.29, 0.26) * (0.86 + 0.28 * fbm2(vW.xz * 0.03));
+        diffuseColor.rgb = mix(ground, diffuseColor.rgb, smoothstep(0.0, 0.35, uNight));
         diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.5, gF.a * 0.4 * mix(uScanGround, 0.2, uScan));
       `,
       emissive: groundEmission,
@@ -320,5 +372,43 @@ export function createMaterials(field) {
   );
   const treeDepth = depthPatch(uniforms, `attribute vec4 aInst; attribute vec2 aTree; uniform float uTime; ${FOCUS}`, TREE_V, 'tree-depth');
 
-  return { uniforms, building, buildingDepth, roads, green, land, water, tree, treeDepth };
+  const car = patch(
+    new THREE.MeshLambertMaterial(),
+    {
+      uniforms,
+      warp: false,
+      vertexHead: 'attribute vec4 aCar; attribute vec4 aCarData; attribute float aPart; uniform float uTime; uniform float uReveal; varying float vPart; varying float vTone;',
+      normalBody: 'objectNormal = vec3(objectNormal.x * aCar.z - objectNormal.z * aCar.w, objectNormal.y, objectNormal.x * aCar.w + objectNormal.z * aCar.z);',
+      vertexBody: /* glsl */ `
+        vPart = aPart;
+        vTone = aCarData.w;
+        float s = fract(aCarData.y + uTime * aCarData.z / aCarData.x) * aCarData.x;
+        float e = smoothstep(0.0, 6.0, s) * smoothstep(0.0, 6.0, aCarData.x - s);
+        vec2 c = aCar.xy + aCar.zw * s;
+        e *= step(length((modelMatrix * vec4(c.x, 0.0, c.y, 1.0)).xz), uReveal);
+        vec3 p = position * e;
+        transformed = vec3(p.x * aCar.z - p.z * aCar.w + c.x, p.y, p.x * aCar.w + p.z * aCar.z + c.y);
+      `,
+      fragmentHead: 'varying float vPart; varying float vTone;',
+      color: /* glsl */ `
+        vec3 paintCol = vec3(0.68, 0.69, 0.7);
+        if (vTone < 0.18) paintCol = vec3(0.03, 0.03, 0.035);
+        else if (vTone < 0.36) paintCol = vec3(0.13, 0.14, 0.15);
+        else if (vTone < 0.56) paintCol = vec3(0.42, 0.43, 0.45);
+        else if (vTone < 0.68) paintCol = vec3(0.07, 0.12, 0.27);
+        else if (vTone < 0.76) paintCol = vec3(0.42, 0.05, 0.045);
+        if (vPart < 0.5) diffuseColor.rgb = vec3(0.012);
+        else if (vPart < 1.5) diffuseColor.rgb = paintCol;
+        else if (vPart < 2.5) diffuseColor.rgb = vec3(0.05, 0.075, 0.1);
+        else diffuseColor.rgb = vec3(0.018);
+      `,
+      emissive: /* glsl */ `
+        if (vPart > 3.5 && vPart < 4.5) totalEmissiveRadiance += vec3(1.0, 0.92, 0.75) * (0.25 + 3.0 * uNight);
+        if (vPart > 4.5) totalEmissiveRadiance += vec3(1.0, 0.08, 0.05) * (0.3 + 2.0 * uNight);
+      `,
+    },
+    'car',
+  );
+
+  return { uniforms, building, buildingDepth, roads, green, land, water, tree, treeDepth, car };
 }

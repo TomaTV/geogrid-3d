@@ -22,11 +22,13 @@ Moteur Three.js écrit de zéro, MapLibre et deck.gl ont été retirés. Inspir�
 - `engine/tile.worker.js` : dans 2 workers, télécharge et décode les tuiles OpenFreeMap, construit toute la géométrie. Le thread principal n'intègre qu'une tuile par image : c'est ce qui évite les gels.
   - Zoom 14 autour de la caméra (bâtiments, routes, eau, verdure, arbres), zoom 11 pour le paysage lointain.
   - Polygones découpés exactement à la tuile, murs de bordure supprimés : pas de doublon entre tuiles.
-  - `hide_3d` respecté, parties OSM (`render_min_height`) gardées, toit mansardé procédural quand l'empreinte s'y prête.
+  - `hide_3d` respecté, parties OSM (`render_min_height`) gardées. Toits générés selon la taille : deux pans ou croupe en tuiles pour les petits immeubles, mansarde en zinc avec lucarnes pour les moyens, terrasse avec acrotère sinon. Un bâtiment coupé par le bord de la tuile reste à toit plat.
+  - Cheminées et équipements de toit dans un maillage à part (`details`), masqué au-delà de 1,5 km et en Low power.
+  - Voitures : instances 3D par tuile (`cars`), déplacées dans le vertex shader le long des tronçons droits, masquées au-delà de 1,3 km et en Low power. De plus loin, de simples traînées lumineuses la nuit.
   - Hauteur manquante dans OSM (5 m par défaut) : estimée immeuble par immeuble depuis son empreinte (environ 5 à 25 m). Le panneau dit « about ».
   - Arbres procéduraux : parcs en bosquets, forêts denses, alignement le long des rues, avec un raster d'occupation pour éviter immeubles, routes et eau.
 - `engine/field.js` : projection locale en mètres et champ de rang, source unique de la couleur et du rang du panneau. Toute la zone du scan reçoit une estimation (poids en inverse de la distance aux points mesurés, un point hors top 20 pèse moins), seul le bord s'estompe. Déformation organique cuite dans la texture 256x256 et appliquée aussi au clic.
-- `engine/materials.js` : shaders Lambert (eau en Standard). Fenêtres, façades, zinc, routes, voitures, lampadaires, eau, arbres. Le scan passe par les routes, les fenêtres, le bas des murs ; immeubles entiers avec Building colors. Sol dessiné sans test de profondeur, dans l'ordre (pas de z-fighting).
+- `engine/materials.js` : shaders Lambert (eau en Standard). Fenêtres, façades, toits (`aMeta.x` : 0 mur, 1 terrasse, 2 tuiles, 3 zinc, 4 équipement, 5 acrotère), routes avec marquages et passages piétons, voitures, lampadaires, eau, arbres. Le scan passe par les routes, les fenêtres, le bas des murs ; immeubles entiers avec Building colors. Sol dessiné sans test de profondeur, dans l'ordre (pas de z-fighting).
 - `engine/landmarks.js` : tour Eiffel (treillis) et pyramide du Louvre dessinées à la main ; les bâtiments OSM sous la tour sont exclus dans le worker.
 - `engine/sky.js` : ciel, soleil, nuages, étoiles et presets Standard, Dusk, Day, Night, plus `livePreset` pour Real time (soleil calculé selon l'heure et le lieu du scan). Voir Réglages par mode.
 - `rank-colors.js` : palette exacte de Geogrid. Hors top 20 = gris `#555555`, pas rouge.

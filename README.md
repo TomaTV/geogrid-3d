@@ -34,7 +34,7 @@ L'assistant crée un scan en 3 étapes : adresse, commerce, puis taille de grill
 
 ## Fonctionnalités
 
-- **Ville 3D** : bâtiments, routes, eau et parcs d'OpenStreetMap, chargés autour de la caméra, avec arbres et toits générés.
+- **Ville 3D** : bâtiments, routes, eau et parcs d'OpenStreetMap, chargés autour de la caméra. Toits (tuiles, zinc, terrasses), cheminées, marquages au sol, arbres et voitures sont générés.
 - **Modes d'affichage** : Standard (sombre), Real time (soleil selon l'heure et le lieu du scan), Dusk, Day et Night.
 - **Building colors** : colore les immeubles selon le rang, avec la palette de Geogrid.
 - **Clic sur un immeuble** : rang estimé, point mesuré le plus proche, distance au commerce et meilleurs résultats à ce point.

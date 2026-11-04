@@ -95,6 +95,7 @@ function triangulate(poly) {
 
 function insetRing(ring, d) {
   const n = ring.length;
+  const inward = ringArea(ring) >= 0 ? -1 : 1;
   const out = [];
   for (let i = 0; i < n; i++) {
     const p = ring[(i + n - 1) % n];
@@ -107,21 +108,20 @@ function insetRing(ring, d) {
     const la = Math.hypot(ax, az) || 1;
     const lb = Math.hypot(bx, bz) || 1;
     ax /= la; az /= la; bx /= lb; bz /= lb;
-    // Exterior rings have negative shoelace area here: (dz, -dx) points inside.
     const nx = az + bz;
     const nz = -ax - bx;
     const nl = Math.hypot(nx, nz) || 1;
     const cos = (nx / nl) * az + (nz / nl) * -ax;
     const m = Math.min(d / Math.max(cos, 0.35), d * 2.4);
-    out.push([c[0] + (nx / nl) * m * -1, c[1] + (nz / nl) * m * -1]);
+    out.push([c[0] + (nx / nl) * m * inward, c[1] + (nz / nl) * m * inward]);
   }
   return out;
 }
 
-function validInset(ring, inset) {
+function validInset(ring, inset, minRatio = 0.3) {
   const a0 = ringArea(ring);
   const a1 = ringArea(inset);
-  if (Math.sign(a0) !== Math.sign(a1) || Math.abs(a1) < Math.abs(a0) * 0.3 || Math.abs(a1) > Math.abs(a0)) return false;
+  if (Math.sign(a0) !== Math.sign(a1) || Math.abs(a1) < Math.abs(a0) * minRatio || Math.abs(a1) > Math.abs(a0)) return false;
   const n = ring.length;
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n;
@@ -129,6 +129,37 @@ function validInset(ring, inset) {
     if (dot <= 0) return false;
   }
   return true;
+}
+
+function ringContains(ring, x, y) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i];
+    const b = ring[j];
+    if (a[1] > y !== b[1] > y && x < a[0] + ((y - a[1]) * (b[0] - a[0])) / (b[1] - a[1])) inside = !inside;
+  }
+  return inside;
+}
+
+// Empreinte presque rectangulaire : renvoie ses 4 coins, le plus long côté en premier, sinon null.
+function rectCorners(ring, unit) {
+  const corners = [];
+  const n = ring.length;
+  for (let i = 0; i < n; i++) {
+    const p = ring[(i + n - 1) % n];
+    const c = ring[i];
+    const q = ring[(i + 1) % n];
+    const la = Math.hypot(c[0] - p[0], c[1] - p[1]);
+    const lb = Math.hypot(q[0] - c[0], q[1] - c[1]);
+    if (la * unit < 0.4 || lb * unit < 0.4) continue;
+    const sin = ((c[0] - p[0]) * (q[1] - c[1]) - (c[1] - p[1]) * (q[0] - c[0])) / (la * lb);
+    if (Math.abs(sin) > 0.2) corners.push(c);
+  }
+  if (corners.length !== 4) return null;
+  const side = (i) => Math.hypot(corners[(i + 1) % 4][0] - corners[i][0], corners[(i + 1) % 4][1] - corners[i][1]);
+  const [s0, s1, s2, s3] = [side(0), side(1), side(2), side(3)];
+  if (Math.abs(s0 - s2) > 0.25 * Math.max(s0, s2) || Math.abs(s1 - s3) > 0.25 * Math.max(s1, s3)) return null;
+  return { corners: s0 >= s1 ? corners : [corners[1], corners[2], corners[3], corners[0]], short: Math.min(s0, s1) * unit };
 }
 
 class Raster {
@@ -192,6 +223,64 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster) {
   const heights = [];
   const center = [];
   const feats = [];
+  const detail = { pos: [], nor: [], wall: [], meta: [], center: [], idx: [] };
+
+  // Pan de toit : (position le long du bord, hauteur) sert au motif du matériau.
+  const addSlope = (p, type, along, seed, h, delay) => {
+    const ux = p[1][0] - p[0][0];
+    const uy = p[1][1] - p[0][1];
+    const uz = p[1][2] - p[0][2];
+    const vx = p[3][0] - p[0][0];
+    const vy = p[3][1] - p[0][1];
+    const vz = p[3][2] - p[0][2];
+    let nx = uy * vz - uz * vy;
+    let ny = uz * vx - ux * vz;
+    let nz = ux * vy - uy * vx;
+    const nl = Math.hypot(nx, ny, nz) || 1;
+    const up = ny >= 0 ? 1 : -1;
+    nx = (nx / nl) * up; ny = (ny / nl) * up; nz = (nz / nl) * up;
+    const ul = Math.hypot(ux, uz) || 1;
+    const v = pos.length / 3;
+    for (const q of p) {
+      pos.push(q[0], q[1], q[2]);
+      nor.push(nx, ny, nz);
+      wall.push(along + ((q[0] - p[0][0]) * ux + (q[2] - p[0][2]) * uz) / ul, q[1]);
+      meta.push(type, seed, h, delay);
+    }
+    if (up > 0) idx.push(v, v + 1, v + 2, v, v + 2, v + 3);
+    else idx.push(v, v + 2, v + 1, v, v + 3, v + 2);
+  };
+
+  const addBox = (x, z, y0, y1, sx, sz, cos, sin, seed, h, delay, cx, cz) => {
+    const d = detail;
+    const c = [[-sx, -sz], [-sx, sz], [sx, sz], [sx, -sz]].map(([a, b]) => [x + (a * cos - b * sin) / 2, z + (a * sin + b * cos) / 2]);
+    for (let i = 0; i < 4; i++) {
+      const a = c[i];
+      const b = c[(i + 1) % 4];
+      const dx = b[0] - a[0];
+      const dz = b[1] - a[1];
+      const len = Math.hypot(dx, dz) || 1;
+      const v = d.pos.length / 3;
+      d.pos.push(a[0], y0, a[1], b[0], y0, b[1], b[0], y1, b[1], a[0], y1, a[1]);
+      for (let k = 0; k < 4; k++) {
+        d.nor.push(-dz / len, 0, dx / len);
+        d.meta.push(4, seed, h, delay);
+        d.center.push(cx, cz);
+      }
+      d.wall.push(0, y0, len, y0, len, y1, 0, y1);
+      d.idx.push(v, v + 1, v + 2, v, v + 2, v + 3);
+    }
+    const v = d.pos.length / 3;
+    for (let i = 0; i < 4; i++) {
+      d.pos.push(c[i][0], y1, c[i][1]);
+      d.nor.push(0, 1, 0);
+      d.wall.push(c[i][0], c[i][1]);
+      d.meta.push(4, seed, h, delay);
+      d.center.push(cx, cz);
+    }
+    d.idx.push(v, v + 1, v + 2, v, v + 2, v + 3);
+  };
+
   for (let i = 0; i < layer.length; i++) {
     const f = layer.feature(i);
     if (f.type !== 3 || f.properties.hide_3d === true) continue;
@@ -226,15 +315,38 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster) {
       heights.push(h);
 
       const touchesBorder = poly.some((r) => r.some((p) => p[0] <= 0 || p[1] <= 0 || p[0] >= E || p[1] >= E));
-      const roofDepth = 3.2;
+      const plain = !touchesBorder && poly.length === 1 && base === 0 && outer.length <= 80;
+      const sq = Math.sqrt(area);
       let eave = h;
       let inset = null;
-      if (!touchesBorder && poly.length === 1 && base === 0 && h >= 9 && area >= 160 && area <= 7000 && outer.length <= 80) {
+      let slopeType = 3;
+      let gable = null;
+      let parapet = null;
+      if (plain && h >= 6 && h <= 17 && area >= 40 && area <= 900 && r0 > 0.18) {
+        slopeType = 2;
+        gable = r0 > 0.45 ? rectCorners(outer, unit) : null;
+        if (gable) {
+          eave = h - Math.min(gable.short * 0.42, 4.5, h - 3);
+        } else {
+          for (const k of [0.36, 0.28, 0.2]) {
+            const candidate = insetRing(outer, (sq * k) / unit);
+            if (validInset(outer, candidate, 0.04)) {
+              inset = candidate;
+              eave = h - Math.min(Math.max(sq * k * 0.8, 1.2), 4.5, h - 3);
+              break;
+            }
+          }
+        }
+      } else if (plain && h >= 9 && h <= 38 && area >= 160 && area <= 7000 && r0 > 0.12) {
         const candidate = insetRing(outer, 2.3 / unit);
         if (validInset(outer, candidate)) {
           inset = candidate;
-          eave = h - roofDepth;
+          eave = h - 3.2;
         }
+      }
+      if (plain && !gable && !inset && area >= 60) {
+        const candidate = insetRing(outer, 0.45 / unit);
+        if (validInset(outer, candidate)) parapet = candidate;
       }
 
       for (const ring of poly) {
@@ -261,7 +373,7 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster) {
           pos.push(ax, base, az, bx, base, bz, bx, eave, bz, ax, eave, az);
           for (let k = 0; k < 4; k++) {
             nor.push(nx, 0, nz);
-            meta.push(0, seed, h, delay);
+            meta.push(0, seed, eave, delay);
           }
           wall.push(along, base, along + len, base, along + len, eave, along, eave);
           idx.push(v, v + 1, v + 2, v, v + 2, v + 3);
@@ -277,51 +389,112 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster) {
           const b = outer[j];
           const c = inset[j];
           const d = inset[i];
-          const p = [
-            [a[0] * unit, eave, a[1] * unit],
-            [b[0] * unit, eave, b[1] * unit],
-            [c[0] * unit, h, c[1] * unit],
-            [d[0] * unit, h, d[1] * unit],
-          ];
-          const ux = p[1][0] - p[0][0];
-          const uz = p[1][2] - p[0][2];
-          const vx = p[3][0] - p[0][0];
-          const vy = p[3][1] - p[0][1];
-          const vz = p[3][2] - p[0][2];
-          let nx = -uz * vy;
-          let ny = uz * vx - ux * vz;
-          let nz = ux * vy;
-          const nl = Math.hypot(nx, ny, nz) || 1;
-          nx /= nl; ny /= nl; nz /= nl;
-          const v = pos.length / 3;
-          for (const q of p) {
-            pos.push(q[0], q[1], q[2]);
-            nor.push(nx, ny, nz);
-            wall.push(q[0], q[2]);
-            meta.push(1, seed, h, delay);
-          }
-          if (ny >= 0) idx.push(v, v + 1, v + 2, v, v + 2, v + 3);
-          else idx.push(v, v + 2, v + 1, v, v + 3, v + 2);
+          addSlope(
+            [
+              [a[0] * unit, eave, a[1] * unit],
+              [b[0] * unit, eave, b[1] * unit],
+              [c[0] * unit, h, c[1] * unit],
+              [d[0] * unit, h, d[1] * unit],
+            ],
+            slopeType, i * 7.3, seed, h, delay,
+          );
         }
       }
 
-      const { flat, tris } = triangulate(inset ? [inset] : poly);
-      const v0 = pos.length / 3;
-      for (let i = 0; i < flat.length; i += 2) {
-        const x = flat[i] * unit;
-        const z = flat[i + 1] * unit;
-        pos.push(x, h, z);
-        nor.push(0, 1, 0);
-        wall.push(x, z);
-        meta.push(1, seed, h, delay);
+      if (gable) {
+        const [c0, c1, c2, c3] = gable.corners.map((c) => [c[0] * unit, c[1] * unit]);
+        const ridge0 = [(c3[0] + c0[0]) / 2, (c3[1] + c0[1]) / 2];
+        const ridge1 = [(c1[0] + c2[0]) / 2, (c1[1] + c2[1]) / 2];
+        const at = (c, y) => [c[0], y, c[1]];
+        addSlope([at(c0, eave), at(c1, eave), at(ridge1, h), at(ridge0, h)], 2, 0, seed, h, delay);
+        addSlope([at(c2, eave), at(c3, eave), at(ridge0, h), at(ridge1, h)], 2, 0, seed, h, delay);
+        for (const [a, b, top] of [[c1, c2, ridge1], [c3, c0, ridge0]]) {
+          const dx = b[0] - a[0];
+          const dz = b[1] - a[1];
+          const len = Math.hypot(dx, dz) || 1;
+          const v = pos.length / 3;
+          pos.push(a[0], eave, a[1], b[0], eave, b[1], top[0], h, top[1]);
+          for (let k = 0; k < 3; k++) {
+            nor.push(-dz / len, 0, dx / len);
+            meta.push(0, seed, h, delay);
+          }
+          wall.push(0, eave, len, eave, len / 2, h);
+          idx.push(v, v + 1, v + 2);
+        }
+      } else {
+        if (parapet) {
+          const n = outer.length;
+          for (let i = 0; i < n; i++) {
+            const j = (i + 1) % n;
+            const a = [outer[i][0] * unit, outer[i][1] * unit];
+            const b = [outer[j][0] * unit, outer[j][1] * unit];
+            const c = [parapet[j][0] * unit, parapet[j][1] * unit];
+            const d = [parapet[i][0] * unit, parapet[i][1] * unit];
+            addSlope([[a[0], h, a[1]], [b[0], h, b[1]], [c[0], h, c[1]], [d[0], h, d[1]]], 5, 0, seed, h, delay);
+            const dx = d[0] - c[0];
+            const dz = d[1] - c[1];
+            const len = Math.hypot(dx, dz) || 1;
+            const v = pos.length / 3;
+            pos.push(c[0], h - 0.9, c[1], d[0], h - 0.9, d[1], d[0], h, d[1], c[0], h, c[1]);
+            for (let k = 0; k < 4; k++) {
+              nor.push(-dz / len, 0, dx / len);
+              meta.push(5, seed, h, delay);
+            }
+            wall.push(0, h - 0.9, len, h - 0.9, len, h, 0, h);
+            idx.push(v, v + 1, v + 2, v, v + 2, v + 3);
+          }
+        }
+        const roofY = parapet ? h - 0.9 : h;
+        const topType = inset && slopeType === 2 ? 2 : 1;
+        const { flat, tris } = triangulate(parapet ? [parapet] : inset ? [inset] : poly);
+        const v0 = pos.length / 3;
+        for (let i = 0; i < flat.length; i += 2) {
+          const x = flat[i] * unit;
+          const z = flat[i + 1] * unit;
+          pos.push(x, roofY, z);
+          nor.push(0, 1, 0);
+          wall.push(x, z);
+          meta.push(topType, seed, h, delay);
+        }
+        for (let i = 0; i < tris.length; i += 3) {
+          const a = tris[i];
+          const b = tris[i + 1];
+          const c = tris[i + 2];
+          const cross = (flat[b * 2 + 1] - flat[a * 2 + 1]) * (flat[c * 2] - flat[a * 2]) - (flat[b * 2] - flat[a * 2]) * (flat[c * 2 + 1] - flat[a * 2 + 1]);
+          if (cross >= 0) idx.push(v0 + a, v0 + b, v0 + c);
+          else idx.push(v0 + a, v0 + c, v0 + b);
+        }
       }
-      for (let i = 0; i < tris.length; i += 3) {
-        const a = tris[i];
-        const b = tris[i + 1];
-        const c = tris[i + 2];
-        const cross = (flat[b * 2 + 1] - flat[a * 2 + 1]) * (flat[c * 2] - flat[a * 2]) - (flat[b * 2] - flat[a * 2]) * (flat[c * 2 + 1] - flat[a * 2 + 1]);
-        if (cross >= 0) idx.push(v0 + a, v0 + b, v0 + c);
-        else idx.push(v0 + a, v0 + c, v0 + b);
+
+      // Cheminées et équipements : maillage à part, affiché seulement de près.
+      const anchor = parapet ?? inset;
+      if (anchor || gable) {
+        const ring = anchor ?? outer;
+        const e0 = outer[0];
+        const e1 = outer[1];
+        const el = Math.hypot(e1[0] - e0[0], e1[1] - e0[1]) || 1;
+        const cos = (e1[0] - e0[0]) / el;
+        const sin = (e1[1] - e0[1]) / el;
+        const equip = !!parapet;
+        const pitched = slopeType === 2;
+        const count = equip ? Math.min(1 + Math.floor(area / 350), 6) : pitched ? (r0 > 0.55 ? 1 : 0) : Math.min(2 + Math.floor(area / 180), 6);
+        for (let k = 0; k < count; k++) {
+          const r1 = hash(fi * 3 + k, k * 7 + 1);
+          const r2 = hash(k * 11 + 3, fi * 5);
+          const v = ring[Math.floor(r1 * ring.length) % ring.length];
+          const f = equip ? 0.15 + 0.6 * r2 : pitched ? 0.2 + 0.25 * r2 : 0.55 + 0.35 * r2;
+          const px = cx + (v[0] - cx) * f;
+          const pz = cz + (v[1] - cz) * f;
+          if (!ringContains(ring, px, pz)) continue;
+          const y0 = equip ? h - 0.9 : pitched ? h - 1.1 : h - 0.1;
+          const tall = equip ? 1 + r2 * 1.6 : pitched ? 2 : 1.3 + r2 * 0.8;
+          const sx = equip ? 1.4 + r1 * 2.4 : 0.7;
+          const sz = equip ? 1.2 + r2 * 2 : 1.4 + r1 * 0.9;
+          addBox(px * unit, pz * unit, y0, y0 + tall, sx, sz, cos, sin, seed, h, delay, cx * unit, cz * unit);
+        }
+        if (equip && h >= 30) {
+          addBox(cx * unit, cz * unit, h - 0.9, h + 3, sq * 0.3, sq * 0.22, cos, sin, seed, h, delay, cx * unit, cz * unit);
+        }
       }
       while (center.length / 2 < pos.length / 3) center.push(cx * unit, cz * unit);
     }
@@ -332,6 +505,9 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster) {
   return {
     pos: new Float32Array(pos), nor: new Float32Array(nor), wall: new Float32Array(wall), meta: new Float32Array(meta), center: new Float32Array(center),
     idx: new Uint32Array(idx), starts: new Uint32Array(starts), idxStarts: new Uint32Array(idxStarts), heights: new Float32Array(heights),
+    detail: detail.idx.length
+      ? { pos: new Float32Array(detail.pos), nor: new Float32Array(detail.nor), wall: new Float32Array(detail.wall), meta: new Float32Array(detail.meta), center: new Float32Array(detail.center), idx: new Uint32Array(detail.idx) }
+      : null,
   };
 }
 
@@ -381,7 +557,9 @@ function buildRoads(layer, E, unit, raster) {
     const hw = l.width / 2 / unit;
     const pts = l.pts;
     if (pts.length < 2) continue;
-    let along = 0;
+    // Un tronçon coupé par le bord de la tuile ne commence pas à un carrefour : pas de passage piéton.
+    const cut = pts[0][0] <= 8 || pts[0][1] <= 8 || pts[0][0] >= E - 8 || pts[0][1] >= E - 8;
+    let along = cut ? 1000 : 0;
     const v0 = pos.length / 3;
     for (let i = 0; i < pts.length; i++) {
       const p = pts[Math.max(0, i - 1)];
@@ -417,6 +595,45 @@ function buildRoads(layer, E, unit, raster) {
   const nor = new Float32Array(pos.length);
   for (let i = 1; i < nor.length; i += 3) nor[i] = 1;
   return { mesh: { pos: new Float32Array(pos), nor, road: new Float32Array(road), idx: new Uint32Array(idx) }, lines };
+}
+
+const CAR_RATE = { motorway: 0.9, trunk: 0.85, primary: 0.75, secondary: 0.6, tertiary: 0.45, minor: 0.22 };
+
+function placeCars(lines, E, unit) {
+  const inst = [];
+  const data = [];
+  for (const l of lines) {
+    const rate = CAR_RATE[l.cls];
+    if (!rate) continue;
+    for (let i = 1; i < l.pts.length && inst.length < 640; i++) {
+      const a = l.pts[i - 1];
+      const b = l.pts[i];
+      const mx = (a[0] + b[0]) / 2;
+      const my = (a[1] + b[1]) / 2;
+      if (mx < 0 || my < 0 || mx > E || my > E) continue;
+      const dx = (b[0] - a[0]) * unit;
+      const dz = (b[1] - a[1]) * unit;
+      const len = Math.hypot(dx, dz);
+      if (len < 28) continue;
+      const ux = dx / len;
+      const uz = dz / len;
+      for (const side of [1, -1]) {
+        const n = Math.max(1, Math.floor(len / 70));
+        for (let k = 0; k < n; k++) {
+          const r = hash(Math.round(a[0]) + k * 13 + side, Math.round(a[1]) - k * 7);
+          if (r > rate) continue;
+          const dirX = ux * side;
+          const dirZ = uz * side;
+          const off = l.width * 0.2;
+          const sx = (side > 0 ? a[0] : b[0]) * unit - dirZ * off;
+          const sz = (side > 0 ? a[1] : b[1]) * unit + dirX * off;
+          inst.push(sx, sz, dirX, dirZ);
+          data.push(len, (k + r) / n, 6 + r * 7, hash(k + 3, Math.round(b[0])));
+        }
+      }
+    }
+  }
+  return inst.length ? { inst: new Float32Array(inst), data: new Float32Array(data) } : null;
 }
 
 function noise(x, y) {
@@ -553,6 +770,8 @@ async function build(job) {
   const roadData = tile.layers.transportation ? buildRoads(tile.layers.transportation, E, unit, near ? raster : null) : { mesh: null, lines: [] };
   const buildings = near && tile.layers.building ? buildBuildings(tile.layers.building, E, unit, ox, oz, job, raster) : null;
   const trees = near ? plantTrees(greens, roadData.lines, E, unit, ox, oz, raster, job) : null;
+  const details = buildings?.detail ?? null;
+  if (buildings) delete buildings.detail;
 
   return {
     origin: [ox, oz],
@@ -561,13 +780,15 @@ async function build(job) {
     green: fillMesh(greensDraw, unit, true),
     roads: roadData.mesh,
     buildings,
+    details,
+    cars: near ? placeCars(roadData.lines, E, unit) : null,
     trees,
   };
 }
 
 function transferables(result) {
   const out = [];
-  for (const part of [result.water, result.green, result.roads, result.buildings, result.trees]) {
+  for (const part of [result.water, result.green, result.roads, result.buildings, result.details, result.cars, result.trees]) {
     if (!part) continue;
     for (const v of Object.values(part)) if (v && v.buffer) out.push(v.buffer);
   }

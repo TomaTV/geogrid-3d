@@ -23,6 +23,36 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 }
 
+function carGeometry() {
+  const part = (sx, sy, sz, x, y, z, id, taper = 0) => {
+    const g = new THREE.BoxGeometry(sx, sy, sz);
+    if (taper) {
+      const p = g.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        if (p.getY(i) > 0) {
+          p.setX(i, p.getX(i) * (1 - taper));
+          p.setZ(i, p.getZ(i) * (1 - taper * 0.4));
+        }
+      }
+      g.computeVertexNormals();
+    }
+    g.translate(x, y, z);
+    g.deleteAttribute('uv');
+    g.setAttribute('aPart', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count).fill(id), 1));
+    return g;
+  };
+  const wheels = [[1.35, 0.82], [1.35, -0.82], [-1.35, 0.82], [-1.35, -0.82]].map(([x, z]) => part(0.62, 0.56, 0.2, x, 0.3, z, 3));
+  return mergeGeometries([
+    part(4.7, 0.02, 2.15, 0, 0.02, 0, 0),
+    part(4.3, 0.56, 1.8, 0, 0.58, 0, 1),
+    part(2.3, 0.5, 1.62, -0.25, 1.11, 0, 2, 0.26),
+    part(1.65, 0.05, 1.3, -0.25, 1.38, 0, 1),
+    ...wheels,
+    part(0.05, 0.14, 1.45, 2.16, 0.66, 0, 4),
+    part(0.05, 0.14, 1.5, -2.16, 0.7, 0, 5),
+  ]);
+}
+
 function treeGeometries() {
   const unit = (g, sx, sy, sz, x, y, z) => {
     g.scale(sx, sy, sz);
@@ -176,6 +206,8 @@ export function createScanMap(container, scan, options) {
   const startedAt = performance.now();
   let now = 0;
   const trees = treeGeometries();
+  const carBase = carGeometry();
+  let extrasOn = true;
   const tiles = new Map();
   const uploads = [];
   const pendingJobs = new Map();
@@ -307,8 +339,16 @@ export function createScanMap(container, scan, options) {
         .forEach(([e]) => dropTile(e));
     }
     for (const e of near) {
-      if (!e.treeMesh) continue;
       const d = Math.hypot(e.cx - camera.position.x, e.cz - camera.position.z);
+      if (e.detailMesh) {
+        const show = extrasOn && d < 1500;
+        if (e.detailMesh.visible !== show) {
+          e.detailMesh.visible = show;
+          shadowDirty = true;
+        }
+      }
+      if (e.carMesh) e.carMesh.visible = extrasOn && d < 1300;
+      if (!e.treeMesh) continue;
       const useNear = d < 900;
       const geo = useNear ? e.treeNear : e.treeFar;
       if (e.treeMesh.geometry !== geo) {
@@ -372,6 +412,42 @@ export function createScanMap(container, scan, options) {
       entry.buildingMesh = mesh;
       entry.data = { pos: b.pos, idx: b.idx, starts: b.starts, idxStarts: b.idxStarts, heights: b.heights };
       growUntil = Math.max(growUntil, now + 3.2);
+    }
+    if (result.details) {
+      const d = result.details;
+      for (let i = 3; i < d.meta.length; i += 4) d.meta[i] += now;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(d.pos, 3));
+      g.setAttribute('normal', new THREE.BufferAttribute(d.nor, 3));
+      g.setAttribute('aWall', new THREE.BufferAttribute(d.wall, 2));
+      g.setAttribute('aMeta', new THREE.BufferAttribute(d.meta, 4));
+      g.setAttribute('aCenter', new THREE.BufferAttribute(d.center, 2));
+      g.setIndex(new THREE.BufferAttribute(d.idx, 1));
+      g.computeBoundingSphere();
+      const mesh = new THREE.Mesh(g, mats.building);
+      mesh.customDepthMaterial = mats.buildingDepth;
+      mesh.position.set(result.origin[0], 0, result.origin[1]);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.matrixAutoUpdate = false;
+      mesh.updateMatrix();
+      add(mesh);
+      entry.detailMesh = mesh;
+    }
+    if (result.cars) {
+      const g = new THREE.InstancedBufferGeometry();
+      g.setIndex(carBase.index.clone());
+      for (const name of ['position', 'normal', 'aPart']) g.setAttribute(name, carBase.attributes[name].clone());
+      g.setAttribute('aCar', new THREE.InstancedBufferAttribute(result.cars.inst, 4));
+      g.setAttribute('aCarData', new THREE.InstancedBufferAttribute(result.cars.data, 4));
+      g.instanceCount = result.cars.inst.length / 4;
+      g.boundingSphere = new THREE.Sphere(new THREE.Vector3(result.size / 2, 2, result.size / 2), result.size * 0.8);
+      const mesh = new THREE.Mesh(g, mats.car);
+      mesh.position.set(result.origin[0], 0, result.origin[1]);
+      mesh.matrixAutoUpdate = false;
+      mesh.updateMatrix();
+      add(mesh);
+      entry.carMesh = mesh;
     }
     if (result.trees) {
       const t = result.trees;
@@ -844,6 +920,7 @@ export function createScanMap(container, scan, options) {
           renderer.setPixelRatio(dpr);
           composer.setPixelRatio(dpr);
         } else if (quality === 4) {
+          extrasOn = false;
           sun.castShadow = false;
         }
       }
@@ -891,6 +968,7 @@ export function createScanMap(container, scan, options) {
     },
     setLowPower(on) {
       quality = on ? 4 : 0;
+      extrasOn = !on;
       lockQuality = on;
       dpr = on ? 0.8 : Math.min(window.devicePixelRatio || 1, 2);
       renderer.setPixelRatio(dpr);
