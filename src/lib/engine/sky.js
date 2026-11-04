@@ -119,7 +119,7 @@ export function createSky() {
           }
         }
         // En dernier, soleil et nuages compris : au ras de l'horizon le ciel vaut exactement le brouillard du sol.
-        c = mix(uFog, c, smoothstep(0.0, 0.1, d.y));
+        c = mix(horizon, c, smoothstep(0.0, 0.1, d.y));
         gl_FragColor = vec4(c, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>

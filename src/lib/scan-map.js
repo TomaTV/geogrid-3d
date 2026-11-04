@@ -279,6 +279,7 @@ export function createScanMap(container, scan, options) {
     mats.uniforms.uSkyHorizon.value.set(p.horizon);
     mats.uniforms.uFogCol.value.set(p.fog);
     mats.uniforms.uSunDir.value.copy(sun.userData.dir);
+    mats.uniforms.uSunXZ.value.set(sun.userData.dir.x, sun.userData.dir.z).normalize();
     mats.uniforms.uSunCol.value.set(p.sun);
     mats.uniforms.uDisc.value = p.sunDisc;
     lightLandmarks(p.night);
@@ -551,9 +552,10 @@ export function createScanMap(container, scan, options) {
       g.setAttribute('aWall', new THREE.BufferAttribute(b.wall, 2));
       g.setAttribute('aMeta', new THREE.BufferAttribute(b.meta, 4));
       g.setAttribute('aCenter', new THREE.BufferAttribute(b.center, 2));
+      g.setAttribute('aAo', new THREE.BufferAttribute(b.ao, 1));
       g.setIndex(new THREE.BufferAttribute(b.idx, 1));
       g.computeBoundingSphere();
-      for (const name of ['aWall', 'aMeta', 'aCenter']) g.attributes[name].onUpload(freeAfterUpload);
+      for (const name of ['aWall', 'aMeta', 'aCenter', 'aAo']) g.attributes[name].onUpload(freeAfterUpload);
       const detailed = z === NEAR_ZOOM;
       const mesh = new THREE.Mesh(g, detailed ? mats.building : mats.buildingMid);
       mesh.position.set(result.origin[0], 0, result.origin[1]);

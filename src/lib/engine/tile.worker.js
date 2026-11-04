@@ -302,11 +302,22 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster, stations) {
     feats.push(f);
   }
 
+  // Toutes les emprises d'abord : l'occlusion des murs doit voir les voisins construits après.
+  const featPolys = feats.map((f) => polygonsOf(f, E));
+  for (const polys of featPolys) for (const poly of polys) raster.fill(poly[0], 1);
+  // Occlusion ambiante cuite par sommet : part de bâti devant le mur à 3, 7, 12 et 18 m (rue étroite, cour).
+  const aoAt = [];
+  const openness = (p, nx, nz) => {
+    let occ = 0;
+    for (const [d, w] of [[3, 0.4], [7, 0.3], [12, 0.2], [18, 0.1]]) if (raster.at(p[0] + (nx * d) / unit, p[1] + (nz * d) / unit) & 1) occ += w;
+    return occ;
+  };
+
   for (let fi = 0; fi < feats.length; fi++) {
     const f = feats[fi];
     let top = Number(f.properties.render_height ?? 5);
     const base = Number(f.properties.render_min_height ?? 0);
-    for (const poly of polygonsOf(f, E)) {
+    for (const poly of featPolys[fi]) {
       const outer = poly[0];
       const area = Math.abs(ringArea(outer)) * unit * unit;
       const fullArea = poly.rawArea * unit * unit;
@@ -316,7 +327,6 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster, stations) {
       // Hauteur absente dans OSM : estimée depuis l'empreinte seule. Une valeur par tuile créait des zones carrées visibles.
       if (h <= 6 && base === 0 && fullArea > 55) h = Math.min(5 + Math.sqrt(fullArea) * 0.6, 22) * (0.85 + r0 * 0.3);
       if (h <= base) continue;
-      raster.fill(outer, 1);
 
       const cx = outer.reduce((s, p) => s + p[0], 0) / outer.length;
       const cz = outer.reduce((s, p) => s + p[1], 0) / outer.length;
@@ -392,6 +402,9 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster, stations) {
             meta.push(0, seed, eave, delay);
           }
           wall.push(along, base, along + len, base, along + len, eave, along, eave);
+          const oa = openness(a, nx, nz);
+          const ob = openness(b, nx, nz);
+          aoAt.push(v, oa, v + 1, ob, v + 2, ob, v + 3, oa);
           idx.push(v, v + 1, v + 2, v, v + 2, v + 3);
           if (!simple && ring === outer) {
             // Ombre de contact au pied du mur.
@@ -526,10 +539,12 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster, stations) {
     }
   }
   if (!starts.length) return null;
+  const ao = new Float32Array(pos.length / 3);
+  for (let i = 0; i < aoAt.length; i += 2) ao[aoAt[i]] = aoAt[i + 1];
   starts.push(pos.length / 3);
   idxStarts.push(idx.length);
   return {
-    pos: new Float32Array(pos), nor: new Float32Array(nor), wall: new Float32Array(wall), meta: new Float32Array(meta), center: new Float32Array(center),
+    pos: new Float32Array(pos), nor: new Float32Array(nor), wall: new Float32Array(wall), meta: new Float32Array(meta), center: new Float32Array(center), ao,
     idx: new Uint32Array(idx), starts: new Uint32Array(starts), idxStarts: new Uint32Array(idxStarts), heights: new Float32Array(heights),
     detail: detail.idx.length
       ? { pos: new Float32Array(detail.pos), nor: new Float32Array(detail.nor), wall: new Float32Array(detail.wall), meta: new Float32Array(detail.meta), center: new Float32Array(detail.center), idx: new Uint32Array(detail.idx) }

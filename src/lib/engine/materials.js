@@ -112,6 +112,7 @@ uniform vec3 uSkyZenith;
 uniform vec3 uSkyHorizon;
 uniform vec3 uFogCol;
 uniform vec3 uSunDir;
+uniform vec2 uSunXZ;
 uniform vec3 uSunCol;
 uniform float uDisc;
 uniform float uTime;
@@ -130,12 +131,18 @@ float revealRing(vec2 xz) {
 }
 `;
 
-// Brouillard habituel, plus un fondu complet avant le bord de la zone chargée : ni cercle ni fin de ville visibles.
+// Perspective aérienne (d'après la brume colorée par le soleil d'Inigo Quilez) : du côté du soleil, la brume prend
+// la couleur de l'horizon du ciel, exactement comme sky.js, et le bleu s'efface avant le rouge au loin. Plus un fondu
+// complet avant le bord de la zone chargée : ni cercle ni fin de ville visibles.
 const EDGE_FOG = /* glsl */ `
 #ifdef USE_FOG
-  float fogFactor = 1.0 - exp(-fogDensity * fogDensity * vFogDepth * vFogDepth);
-  fogFactor = max(fogFactor, smoothstep(uEdge * 0.7, uEdge, length(vW.xz - uCam.xz)));
-  gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, fogFactor);
+  vec2 fogDir = vW.xz - cameraPosition.xz;
+  float fogSide = pow(max(dot(fogDir, uSunXZ) * inversesqrt(dot(fogDir, fogDir) + 1e-4) * 0.5 + 0.5, 0.0), 2.5);
+  vec3 fogC = mix(fogColor, uSkyHorizon, fogSide);
+  float fogF = 1.0 - exp(-fogDensity * fogDensity * vFogDepth * vFogDepth);
+  vec3 fogFactor = clamp(fogF + fogF * (1.0 - fogF) * vec3(-0.18, 0.0, 0.2), 0.0, 1.0);
+  fogFactor = max(fogFactor, vec3(smoothstep(uEdge * 0.7, uEdge, length(vW.xz - uCam.xz))));
+  gl_FragColor.rgb = mix(gl_FragColor.rgb, fogC, fogFactor);
 #endif
 `;
 
@@ -235,6 +242,7 @@ export function createMaterials(field) {
     uSkyHorizon: { value: new THREE.Color() },
     uFogCol: { value: new THREE.Color() },
     uSunDir: { value: new THREE.Vector3(0, 1, 0) },
+    uSunXZ: { value: new THREE.Vector2(0, 1) },
     uSunCol: { value: new THREE.Color() },
     uDisc: { value: 0 },
     uNoise: { value: noiseTexture() },
@@ -253,9 +261,9 @@ export function createMaterials(field) {
 
   const buildingParts = {
       uniforms,
-      vertexHead: `attribute vec2 aWall; attribute vec2 aCenter; attribute vec4 aMeta; varying vec2 vWall; flat varying vec4 vMeta; uniform float uTime; ${FOCUS}`,
-      vertexBody: `${GROW}\nvWall = aWall; vMeta = aMeta;`,
-      fragmentHead: 'varying vec2 vWall; flat varying vec4 vMeta; float gWin; float gDetail; float gTower; float gShop; float gShopRnd; vec2 gCell; vec4 gF;',
+      vertexHead: `attribute vec2 aWall; attribute vec2 aCenter; attribute vec4 aMeta; attribute float aAo; varying vec2 vWall; flat varying vec4 vMeta; varying float vAo; uniform float uTime; ${FOCUS}`,
+      vertexBody: `${GROW}\nvWall = aWall; vMeta = aMeta; vAo = aAo;`,
+      fragmentHead: 'varying vec2 vWall; flat varying vec4 vMeta; varying float vAo; float gWin; float gDetail; float gTower; float gShop; float gShopRnd; vec2 gCell; vec4 gF;',
       color: /* glsl */ `
         gF = sampleField(vW.xz);
         gDx = dFdx(vW.xz);
@@ -272,7 +280,9 @@ export function createMaterials(field) {
           float tower = step(38.0, vMeta.z);
           gTower = tower;
           float layer = tower > 0.5 ? 3.0 : kind >= 0.84 ? 1.0 : kind >= 0.66 ? 2.0 : 0.0;
-          vec2 c = vec2(vWall.x / mix(3.7, 1.8, tower), (vWall.y - 0.4) / mix(3.3, 3.6, tower));
+          // Rythme propre à chaque immeuble : travées de 3,2 à 4,3 m, étages de 3 à 3,6 m.
+          float floorH = mix(mix(3.0, 3.6, fract(seed * 17.3)), 3.6, tower);
+          vec2 c = vec2(vWall.x / mix(mix(3.2, 4.3, fract(seed * 29.1)), 1.8, tower), (vWall.y - 0.4) / floorH);
           vec2 fw = fwidth(c);
           gCell = c;
           gDetail = 1.0 - smoothstep(0.25, 0.7, max(fw.x, fw.y));
@@ -295,7 +305,18 @@ export function createMaterials(field) {
           // Patine : coulures verticales sous les fenêtres et la corniche, plus marquées en bas de façade.
           float streak = smoothstep(0.38, 0.85, fbm2(vec2(vWall.x * 0.85, vWall.y * 0.05) + seed * 40.0));
           float stain = 1.0 - 0.2 * streak * (0.45 + 0.55 * (1.0 - height01)) - 0.1 * smoothstep(vMeta.z - 4.0, vMeta.z - 0.8, vWall.y) * (1.0 - coping);
-          diffuseColor.rgb = facade * ao * stain * (0.92 + 0.14 * height01) * (1.0 + 0.3 * coping);
+          // Rue étroite ou cour : le bas du mur reçoit moins de ciel (occlusion cuite par le worker).
+          float canyon = 1.0 - 0.55 * vAo * (1.0 - smoothstep(0.0, 24.0, vWall.y));
+          diffuseColor.rgb = facade * ao * stain * canyon * (0.92 + 0.14 * height01) * (1.0 + 0.3 * coping);
+          // Immeubles de pierre de plus de 14 m : balcons filants en fer forgé au 2e et à l'avant-dernier étage.
+          float fl = floor(c.y);
+          float topFl = floor((vMeta.z - 0.4) / floorH) - 1.0;
+          float yIn = fract(c.y) * floorH;
+          float balcony = step(layer, 0.5) * step(14.0, vMeta.z) * max(step(abs(fl - 1.0), 0.5), step(abs(fl - topFl), 0.5));
+          float bFade = 1.0 - smoothstep(0.08, 0.3, fwidth(vWall.y));
+          float rail = smoothstep(0.1, 0.16, yIn) * smoothstep(1.05, 0.98, yIn) * (0.55 + 0.45 * step(0.5, fract(vWall.x / 0.14)) * bFade);
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.05, 0.05, 0.055), balcony * mix(0.3, rail * 0.85, bFade));
+          diffuseColor.rgb *= 1.0 - 0.35 * balcony * bFade * smoothstep(0.1, 0.0, abs(yIn - 0.04));
           float pane = tex.a * upper;
           gWin = pane * gDetail;
           vec3 skyGrey = mix(vec3(dot(uSky, vec3(0.33))), uSky, 0.45);
@@ -377,14 +398,14 @@ export function createMaterials(field) {
     {
       ...buildingParts,
       uniforms: { ...uniforms, uFocusR: { value: 1e9 }, uLodR: uniforms.uFocusR },
-      vertexHead: `attribute vec2 aWall; attribute vec2 aCenter; attribute vec4 aMeta; varying vec2 vWall; flat varying vec4 vMeta; uniform float uTime; uniform vec3 uCam; uniform float uLodR; uniform float uMidR; ${LOD}`,
-      vertexBody: `${GROW_MID}\nvWall = aWall; vMeta = aMeta;`,
+      vertexHead: `attribute vec2 aWall; attribute vec2 aCenter; attribute vec4 aMeta; attribute float aAo; varying float vAo; varying vec2 vWall; flat varying vec4 vMeta; uniform float uTime; uniform vec3 uCam; uniform float uLodR; uniform float uMidR; ${LOD}`,
+      vertexBody: `${GROW_MID}\nvWall = aWall; vMeta = aMeta; vAo = aAo;`,
     },
     'building-mid',
   );
   const buildingDetail = patch(new THREE.MeshLambertMaterial(), { ...buildingParts, vertexBody: `${GROW}
 ${DETAIL_FADE}
-vWall = aWall; vMeta = aMeta;` }, 'building-detail');
+vWall = aWall; vMeta = aMeta; vAo = aAo;` }, 'building-detail');
   const skirt = new THREE.ShaderMaterial({
     uniforms: { uTime: uniforms.uTime },
     transparent: true,
