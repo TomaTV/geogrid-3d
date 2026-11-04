@@ -534,7 +534,7 @@ totalEmissiveRadiance += vec3(0.4, 1.0, 0.75) * revealRing(vW.xz) * 2.0;`,
           float a1 = vnoise(wq);
           vec2 grad = (vec2(vnoise(wp + vec2(0.2, 0.0)), vnoise(wp + vec2(0.0, 0.2))) - a0)
             + 0.5 * (vec2(vnoise(wq + vec2(0.2, 0.0)), vnoise(wq + vec2(0.0, 0.2))) - a1);
-          vec3 wn = normalize(vec3(-grad.x * 1.1 * calm, 1.0, -grad.y * 1.1 * calm));
+          vec3 wn = normalize(vec3(-grad.x * 0.45 * calm, 1.0, -grad.y * 0.45 * calm));
           vec3 wv = normalize(vW - cameraPosition);
           vec3 wr = reflect(wv, wn);
           float wh = max(wr.y, 0.0);

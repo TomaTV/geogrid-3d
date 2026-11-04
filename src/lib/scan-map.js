@@ -384,7 +384,7 @@ export function createScanMap(container, scan, options) {
   const exclude = [[...proj.toWorld(2.2945, 48.85826), 135]];
   const look = new THREE.Vector3();
   const focusTo = new THREE.Vector2();
-  const focusRadius = (dist) => (introDone ? THREE.MathUtils.clamp(dist * 2.1, 1400, 3000) : 2600);
+  const focusRadius = (dist) => (introDone ? THREE.MathUtils.clamp(dist * 2.0, 1300, 2800) : 2600);
   let edgeTo = 2600;
   // La zone détaillée se centre un peu devant la cible, du côté où regarde la caméra : plus de détail dans le champ, moins derrière.
   const focusAt = new THREE.Vector3();
