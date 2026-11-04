@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http';
-import { Component, inject, input, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ScanMap } from './scan-map';
@@ -141,7 +141,10 @@ import { formatRank, rankColor } from '../../lib/rank-colors.js';
             <p class="mt-1.5 text-[13px] leading-relaxed text-white/60">{{ tourSteps[tour()!].text }}</p>
             <div class="mt-3.5 flex items-center justify-between">
               <button type="button" class="text-[12px] text-white/40 hover:text-white/70" (click)="endTour()">Skip</button>
-              <button type="button" class="rounded-lg bg-accent/90 px-3.5 py-1.5 text-[12px] font-medium text-black hover:bg-accent" (click)="nextTour()">{{ tour() === tourSteps.length - 1 ? 'Start exploring' : 'Next' }}</button>
+              <span class="flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.14em] text-accent/80">
+                <span class="size-1.5 animate-pulse rounded-full bg-accent"></span>
+                {{ tourDone() ? 'Nice' : 'Try it to continue' }}
+              </span>
             </div>
           </div>
         }
@@ -173,10 +176,11 @@ export class ScanView {
   loading = signal(true);
   error = signal(false);
   tour = signal<number | null>(null);
+  tourDone = signal(false);
   tourSteps = [
     { title: 'Move around.', text: 'Drag to move, scroll to zoom, right-drag to rotate. W A S D or the arrow keys also work.' },
     { title: 'Click a building.', text: 'You get the estimated rank at that spot, the nearest measured point and the top results there.' },
-    { title: 'Colors and time.', text: 'The rail on the left switches the time of day. The last button colors buildings by rank.' },
+    { title: 'Change the look.', text: 'Open the clock in the rail on the left to switch the time of day, or press the last button to color buildings by rank.' },
   ];
   private tourSeen = (() => {
     try {
@@ -189,6 +193,37 @@ export class ScanView {
   dist = (m: number) => (m >= 1000 ? (m / 1000).toFixed(1) + ' km' : m + ' m');
   color = rankColor;
 
+
+  constructor() {
+    const moved = () => this.tourStepDone(0);
+    const onKey = (e: KeyboardEvent) => /^(Key[WASD]|Arrow)/.test(e.code) && moved();
+    const onMove = (e: PointerEvent) => e.buttons && moved();
+    window.addEventListener('wheel', moved, { passive: true });
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('pointermove', onMove);
+    inject(DestroyRef).onDestroy(() => {
+      window.removeEventListener('wheel', moved);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('pointermove', onMove);
+    });
+    effect(() => {
+      if (this.active()) untracked(() => this.tourStepDone(1));
+    });
+    effect(() => {
+      const changed = this.menu() === 'time' || this.time() !== 'standard' || this.scanColors();
+      if (changed) untracked(() => this.tourStepDone(2));
+    });
+  }
+
+  private tourStepDone(step: number) {
+    if (this.tour() !== step || this.tourDone()) return;
+    this.tourDone.set(true);
+    setTimeout(() => {
+      if (this.tour() !== step) return;
+      this.tourDone.set(false);
+      this.nextTour();
+    }, 900);
+  }
 
   async search(event: Event, query: string) {
     event.preventDefault();
