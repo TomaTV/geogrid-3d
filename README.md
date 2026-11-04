@@ -54,7 +54,7 @@ Je ne l'ai pas réutilisé, pour trois raisons : c'est son propre moteur, pas un
 
 ## Fonctionnalités
 
-- **Ville 3D** : bâtiments, routes, eau et parcs d'OpenStreetMap, chargés là où regarde la caméra et fondus dans le brouillard au loin, sans limite visible. Toits (tuiles, zinc, terrasses), cheminées, marquages au sol, arbres, lampadaires et voitures sont générés.
+- **Ville 3D** : bâtiments, routes, eau et parcs d'OpenStreetMap, détaillés selon la distance à la caméra et prolongés jusqu'au brouillard, sans limite visible. Toits (tuiles, zinc, terrasses, verrières de gare), cheminées, marquages au sol, herbe, allées, pavés, voies ferrées et quais, arbres, lampadaires et voitures sont générés, avec des textures dessinées au démarrage.
 - **Chargement et visite rapide** : un écran de chargement pendant la construction de la ville, puis une visite en 3 étapes la première fois (déplacement, clic sur un immeuble, modes et couleurs). Elle ne revient pas ensuite.
 - **Compteur FPS** : en bas à droite de la vue 3D.
 - **Modes d'affichage** : Standard (nuit brumeuse), Real time (soleil selon l'heure et le lieu du scan), Dusk, Day et Night. En Standard et Night, vue de haut, la ville s'allume d'un point par lampadaire.
