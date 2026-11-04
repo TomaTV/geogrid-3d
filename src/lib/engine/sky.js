@@ -2,9 +2,9 @@ import * as THREE from 'three';
 
 export const PRESETS = {
   standard: {
-    elevation: 40, azimuth: 215, sun: '#a9bcf0', sunPower: 1.5, envPower: 0.62, night: 0.7, stars: 0.35, sunDisc: 0, hemi: '#7888ad',
-    zenith: '#0a1224', mid: '#15213a', horizon: '#2a3857', fog: '#1b2540', fogDensity: 0.00036, exposure: 1.12, bloom: 0.24, clouds: '#1f2a42',
-    scan: { road: 0.45, ground: 0.1, groundGlow: 0.03, wall: 0.06, win: 0.1, facade: 0.35, shop: 0.55, winGlow: 0.75, roof: 0.05, facadeScan: 0.15 },
+    elevation: 40, azimuth: 215, sun: '#b9c6ea', sunPower: 0.85, envPower: 0.3, night: 0.85, stars: 0.35, sunDisc: 0, hemi: '#5d6880',
+    zenith: '#070b14', mid: '#0c1320', horizon: '#141c2b', fog: '#121926', fogDensity: 0.00036, exposure: 1.05, bloom: 0.2, clouds: '#161e2e',
+    scan: { road: 0.45, ground: 0.1, groundGlow: 0.03, wall: 0.13, win: 0.5, facade: 0.6, shop: 1.1, winGlow: 1.25, roof: 0.07, facadeScan: 0.2 },
     colors: { mix: 0.48, glow: 0.05, win: 0.55 },
   },
   dusk: {
