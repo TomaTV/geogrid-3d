@@ -82,7 +82,10 @@ Dans `src/lib/engine/sky.js`, chaque preset porte :
 
 Rendu obligatoire : un document texte expliquant les choix et la façon d'obtenir les fonctionnalités, et, si l'IA est utilisée, les prompts et l'usage du contexte. Une vidéo équivalente est acceptée à la place. Le texte est dans la section « Démarche et usage de l'IA » du README : la tenir à jour à chaque évolution notable, avec de vrais prompts de Thomas, jamais inventés.
 
-## À faire (reprise : mercredi 2026-11-04 après-midi)
+## À faire (reprise : jeudi 2026-11-05)
+
+Thomas continue le visuel à la reprise. À regarder : lampadaires vus d'une rue dégagée, 45 FPS et nuit très sombre collé à une façade, panneau de clic sur le scan simulé (lien Google Maps et mention « measured » à masquer).
+
 
 1. Tests de bout en bout : création de scan depuis le wizard, collection, puis mode live. Prévus par Thomas plus tard.
 2. Déploiement Vercel sur `3d.geogrid.dev`, fait par Thomas depuis le repo public. `vercel.json` et `api/collection.mjs` lancent json-server en mémoire : écritures perdues au démarrage à froid, et deux instances peuvent diverger. Jamais essayé sur un vrai déploiement. Proxy de clé et mode live pas encore portés sur Vercel (décision de Thomas : plus tard).
