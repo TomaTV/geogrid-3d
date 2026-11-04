@@ -50,7 +50,7 @@ export function createScanMap(container, scan, options) {
   const hq = /[?&]hq\b/.test(location.search);
 
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-  let dpr = Math.min(window.devicePixelRatio || 1, 1);
+  let dpr = Math.min(window.devicePixelRatio || 1, 2);
   renderer.setPixelRatio(dpr);
   renderer.setSize(container.clientWidth, container.clientHeight);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -86,7 +86,7 @@ export function createScanMap(container, scan, options) {
   const hemi = new THREE.HemisphereLight(0xffffff, 0x222222, 1);
   scene.add(hemi);
 
-  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 2 }));
+  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
   composer.setPixelRatio(dpr);
   composer.setSize(container.clientWidth, container.clientHeight);
   composer.addPass(new RenderPass(scene, camera));
@@ -892,7 +892,7 @@ export function createScanMap(container, scan, options) {
     setLowPower(on) {
       quality = on ? 4 : 0;
       lockQuality = on;
-      dpr = on ? 0.8 : Math.min(window.devicePixelRatio || 1, 1);
+      dpr = on ? 0.8 : Math.min(window.devicePixelRatio || 1, 2);
       renderer.setPixelRatio(dpr);
       composer.setPixelRatio(dpr);
     },

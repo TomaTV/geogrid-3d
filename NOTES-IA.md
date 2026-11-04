@@ -45,6 +45,7 @@ Apparition : les immeubles et les arbres poussent en vague depuis le centre du s
 - Fixture : `public/mock/scan-demo-21.json`, scan réel 21x21 (id `baf01975-faaa-441b-a0e7-38ed8495bc49`), « pizzeria », Casa'Mia à Boulogne-Billancourt, rayon 5 km, statut `partial`, 421 nœuds. Rangs : 75 en top 3, 51 en 4-10, 295 absents du top 20. Le sud du scan (rangs 6 à 9) sort du cadre de la vue par défaut.
 - `scan.latitude/longitude` = centre demandé. Position du commerce = `grid_data[n].self.lat/lng` (fiche Google trouvée), différente du centre.
 - Rang `null` = non mesuré, rang 101 = absent du top 20. Ne pas confondre.
+- Un commerce local n'est classé que dans sa commune et ses voisines : un scan de 5 km reste en bonne partie hors top 20. Essai du 2026-11-04 autour d'Asnières (id `968b880b-7a8d-4efd-8321-8897f31a5d4b`) : 85 % de points absents, moins riche que Casa'Mia, écarté.
 - Dans Paris, les résultats sont quasi identiques d'un point à l'autre (sondes du 2026-11-04 : salon de thé, librairie, pâtisserie). Ils changent en passant d'une commune à l'autre : une démo variée doit couvrir plusieurs communes. Viser le commerce par `target_cid`, le nom seul peut ne rien trouver.
 - Sous Git Bash, `curl -d` avec un accent envoie un caractère invalide : passer par `--data-binary @fichier.json`.
 
@@ -72,7 +73,7 @@ Dans `src/lib/engine/sky.js`, chaque preset porte :
 1. Tests de bout en bout : création de scan depuis le wizard, collection, puis mode live. Prévus par Thomas plus tard.
 2. Déploiement Vercel sur `3d.geogrid.dev`, fait par Thomas depuis le repo public. `vercel.json` et `api/collection.mjs` lancent json-server en mémoire : écritures perdues au démarrage à froid, et deux instances peuvent diverger. Jamais essayé sur un vrai déploiement. Proxy de clé et mode live pas encore portés sur Vercel (décision de Thomas : plus tard).
 
-Décisions de Thomas : pas de mobile, pas de comparaison de scans. Pas de test headless sans demande : ça fait chauffer son PC. Pour publier une mise à jour : `git subtree split --prefix=3d`, puis push du résultat sur `main` de `TomaTV/geogrid-3d`.
+Décisions de Thomas : pas de mobile, pas de comparaison de scans. Pas de test headless sans demande : ça fait chauffer son PC. Pour une capture, puppeteer avec `--use-angle=d3d11 --enable-gpu` passe par son GPU : rapide, 2560x1440 avec `deviceScaleFactor: 2`. Le rendu logiciel swiftshader bloque à cette taille. Pour publier une mise à jour : `git subtree split --prefix=3d`, puis push du résultat sur `main` de `TomaTV/geogrid-3d`.
 
 ## À vérifier ou à améliorer
 

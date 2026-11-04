@@ -84,6 +84,15 @@ export function createField(nodes, proj) {
   // Comme les cases estimées de Geogrid : toute la zone du scan reçoit une estimation, seul le bord s'estompe.
   const reach = Math.max(...pts.map((p) => Math.hypot(p[0], p[1]))) + 150;
   const sigma = Math.max(step * 1.6, 520);
+  // Un point hors top 20 isolé au milieu de points classés ne creuse pas de trou dans la zone ; le panneau garde sa vraie valeur.
+  const absentWeight = nodes.map((n, i) => {
+    if (n.rank == null || n.rank <= 20) return 0;
+    let ranked = 0;
+    pts.forEach((p, j) => {
+      if (j !== i && nodes[j].rank != null && nodes[j].rank <= 20 && Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]) < step * 1.6) ranked++;
+    });
+    return ranked >= 5 ? 0.08 : 0.45;
+  });
 
   // Source unique : la couleur affichée sur la ville et le rang du panneau sortent de ce calcul.
   function estimate(x, z) {
@@ -101,7 +110,7 @@ export function createField(nodes, proj) {
       const d = Math.max(Math.hypot(pts[i][0] - wx, pts[i][1] - wz), 60);
       const wi = 1 / d ** 3;
       if (nodes[i].rank > 20) {
-        unranked += wi * 0.45;
+        unranked += wi * absentWeight[i];
       } else {
         ranked += wi;
         sum += wi * nodes[i].rank;

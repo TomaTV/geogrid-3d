@@ -133,9 +133,13 @@ export function createMaterials(field) {
         gWin = 0.0;
         gDetail = 0.0;
         if (vMeta.x < 0.5) {
-          vec3 stone = mix(vec3(0.60, 0.53, 0.42), vec3(0.70, 0.65, 0.56), fract(seed * 7.3 + cellTone));
-          stone = mix(stone, vec3(0.46, 0.30, 0.24), step(0.86, fract(seed * 13.7)));
-          vec2 c = vec2(vWall.x / 3.7, (vWall.y - 0.4) / 3.3);
+          float kind = fract(seed * 13.7);
+          float tower = step(38.0, vMeta.z);
+          vec3 stone = mix(vec3(0.62, 0.55, 0.44), vec3(0.77, 0.72, 0.63), fract(seed * 7.3 + cellTone));
+          stone = mix(stone, vec3(0.52, 0.53, 0.55), step(0.66, kind) * step(kind, 0.84));
+          stone = mix(stone, vec3(0.50, 0.32, 0.25), step(0.84, kind));
+          stone = mix(stone, vec3(0.44, 0.47, 0.5), tower);
+          vec2 c = vec2(vWall.x / mix(3.7, 1.8, tower), (vWall.y - 0.4) / mix(3.3, 3.6, tower));
           vec2 fw = fwidth(c);
           gCell = c;
           gDetail = 1.0 - smoothstep(0.12, 0.4, max(fw.x, fw.y));
@@ -145,22 +149,34 @@ export function createMaterials(field) {
           if (gDetail > 0.0) {
             vec2 f = fract(c);
             vec2 aa = clamp(fw * 1.2, 0.01, 0.2);
-            float wx = smoothstep(0.24 - aa.x, 0.24 + aa.x, f.x) * (1.0 - smoothstep(0.76 - aa.x, 0.76 + aa.x, f.x));
-            float wy = smoothstep(0.2 - aa.y, 0.2 + aa.y, f.y) * (1.0 - smoothstep(0.84 - aa.y, 0.84 + aa.y, f.y));
+            float mx = mix(0.24, 0.07, tower);
+            float my = mix(0.2, 0.12, tower);
+            float wx = smoothstep(mx - aa.x, mx + aa.x, f.x) * (1.0 - smoothstep(1.0 - mx - aa.x, 1.0 - mx + aa.x, f.x));
+            float wy = smoothstep(my - aa.y, my + aa.y, f.y) * (1.0 - smoothstep(0.86 - aa.y, 0.86 + aa.y, f.y));
             gWin = wx * wy * gDetail * step(3.6, vWall.y);
             cornice = smoothstep(0.1, 0.0, f.y) * gDetail;
             balcony = step(2.5, mod(floor(c.y), 4.0)) * smoothstep(0.2, 0.12, f.y) * gDetail;
           }
           float storey = smoothstep(3.6, 3.2, vWall.y);
           float height01 = clamp(vWall.y / max(vMeta.z, 1.0), 0.0, 1.0);
+          float coping = smoothstep(vMeta.z - 0.8, vMeta.z - 0.4, vWall.y);
+          float farFloors = (1.0 - gDetail) * (1.0 - smoothstep(0.25, 0.6, fw.y)) * step(0.5, fract(c.y));
           diffuseColor.rgb = stone * ao * (1.0 - 0.22 * cornice) * (1.0 - 0.55 * balcony) * mix(1.0, 0.68, storey) * (0.9 + 0.16 * height01);
-          diffuseColor.rgb = mix(diffuseColor.rgb, mix(vec3(0.16, 0.2, 0.25), vec3(0.02, 0.025, 0.035), smoothstep(0.0, 0.4, uNight)), gWin);
+          diffuseColor.rgb *= mix(0.8, 1.0, gDetail) * (1.0 - 0.16 * farFloors) * (1.0 + 0.35 * coping);
+          vec3 glass = mix(vec3(0.16, 0.2, 0.25), vec3(0.24, 0.36, 0.46), tower);
+          diffuseColor.rgb = mix(diffuseColor.rgb, mix(glass, vec3(0.02, 0.025, 0.035), smoothstep(0.0, 0.4, uNight)), gWin);
         } else {
           vec3 zinc = mix(vec3(0.17, 0.2, 0.24), vec3(0.3, 0.31, 0.33), fract(seed * 5.1 + cellTone * 0.6));
+          float roofKind = fract(seed * 11.3);
+          zinc = mix(zinc, vec3(0.38, 0.38, 0.36), step(0.6, roofKind) * step(roofKind, 0.82));
+          zinc = mix(zinc, vec3(0.38, 0.25, 0.2), step(0.82, roofKind));
+          float grain = hash21(floor(vW.xz * 0.5)) - 0.5;
+          zinc *= 1.0 + 0.16 * grain * (1.0 - smoothstep(0.2, 0.8, fwidth(vW.x * 0.5)));
           diffuseColor.rgb = mix(zinc, gF.rgb, gF.a * uRoof);
         }
         if (uScan > 0.5) {
-          float shade = vMeta.x < 0.5 ? mix(0.62, 1.0, smoothstep(0.0, 12.0, vWall.y)) * (1.0 - gWin * 0.28) : 0.68;
+          float relief = clamp(dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11)) / (vMeta.x < 0.5 ? 0.5 : 0.28), 0.6, 1.25);
+          float shade = (vMeta.x < 0.5 ? mix(0.62, 1.0, smoothstep(0.0, 12.0, vWall.y)) : 0.68) * relief;
           diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * shade * 0.85, smoothstep(0.03, 0.55, gF.a) * uColorMix);
         }
       `,
@@ -178,6 +194,7 @@ export function createMaterials(field) {
           totalEmissiveRadiance += win * gWin * step(rnd, density) * uNight * (0.65 + 0.65 * fract(rnd * 31.0)) * mix(uWinGlow, uColorWin, uScan);
           totalEmissiveRadiance += mix(warm * 0.5, gF.rgb * 0.9, gF.a * mix(uFacadeScan, 1.0, uScan)) * (1.0 - gDetail) * density * uFacade * uNight;
           float shop = (1.0 - smoothstep(3.0, 3.5, vWall.y)) * smoothstep(0.6, 1.2, vWall.y);
+          shop *= 1.0 - smoothstep(0.2, 0.7, fwidth(vWall.y));
           totalEmissiveRadiance += warm * shop * step(0.45, fract(floor(vWall.x * 0.14) * 0.37 + vMeta.y * 9.0)) * uNight * uShop;
         } else {
           totalEmissiveRadiance += gF.rgb * gF.a * uScan * uColorGlow * 1.6;
@@ -205,7 +222,7 @@ export function createMaterials(field) {
         diffuseColor.rgb = mix(vec3(0.05, 0.052, 0.057), vec3(0.2, 0.19, 0.18), vRoad.z > 5.0 ? kerb : 0.0);
         float dash = step(0.5, fract(vRoad.y / 7.0)) * (1.0 - smoothstep(0.015, 0.04, across)) * step(7.0, vRoad.z);
         diffuseColor.rgb += dash * 0.3;
-        diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.5, gF.a * 0.4 * mix(uScanGround, 1.0, uScan));
+        diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.5, gF.a * 0.4 * mix(uScanGround, 0.2, uScan));
       `,
       emissive: /* glsl */ `
         float edge = smoothstep(0.55, 0.8, abs(vRoad.x)) * (1.0 - smoothstep(0.8, 1.0, abs(vRoad.x)));
@@ -228,7 +245,7 @@ export function createMaterials(field) {
   );
 
   const groundEmission = /* glsl */ `
-    totalEmissiveRadiance += gF.rgb * gF.a * mix(uScanGround, 1.0, uScan) * uScanGroundGlow;
+    totalEmissiveRadiance += gF.rgb * gF.a * mix(uScanGround, 0.2, uScan) * uScanGroundGlow;
     totalEmissiveRadiance += vec3(0.4, 1.0, 0.75) * revealRing(vW.xz) * 2.0;
   `;
 
@@ -240,7 +257,7 @@ export function createMaterials(field) {
       color: /* glsl */ `
         gF = sampleField(vW.xz);
         diffuseColor.rgb *= 0.78 + 0.44 * vnoise(vW.xz * 0.09);
-        diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.45, gF.a * 0.25 * mix(uScanGround, 1.0, uScan));
+        diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.45, gF.a * 0.25 * mix(uScanGround, 0.2, uScan));
       `,
       emissive: groundEmission,
     },
@@ -255,7 +272,7 @@ export function createMaterials(field) {
       fragmentHead: 'vec4 gF;',
       color: /* glsl */ `
         gF = sampleField(vW.xz);
-        diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.5, gF.a * 0.4 * mix(uScanGround, 1.0, uScan));
+        diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.5, gF.a * 0.4 * mix(uScanGround, 0.2, uScan));
       `,
       emissive: groundEmission,
     },
