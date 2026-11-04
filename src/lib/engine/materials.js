@@ -232,6 +232,8 @@ export function createMaterials(field) {
     uFocus: { value: new THREE.Vector2() },
     uFocusR: { value: 5000 },
     uPixel: { value: 0.0005 },
+    uFogD: { value: 0 },
+    uDpr: { value: 1 },
     uEdge: { value: 2600 },
   };
 
@@ -543,7 +545,9 @@ totalEmissiveRadiance += vec3(0.4, 1.0, 0.75) * revealRing(vW.xz) * 2.0;`,
           totalEmissiveRadiance += wsky * fres;
           float sunR = max(dot(wr, uSunDir), 0.0);
           totalEmissiveRadiance += uSunCol * (pow(sunR, 60.0) * 0.5 + pow(sunR, 600.0) * 3.0) * uDisc * fres * 3.0;
-          totalEmissiveRadiance += vec3(1.0, 0.66, 0.36) * smoothstep(0.45, 0.8, a1) * 0.035 * uNight * calm;
+          // La nuit, la ville se reflète : lueur chaude par larges plaques, plus forte en rasant.
+          totalEmissiveRadiance += vec3(1.0, 0.64, 0.34) * 0.06 * fres * smoothstep(0.45, 0.8, a0 * 0.6 + a1 * 0.4) * uNight;
+          totalEmissiveRadiance += uFogCol * 0.5 * uNight;
         } else if (gKind > 0.5) {
           totalEmissiveRadiance += gF.rgb * gF.a * mix(uScanGround, 0.2, uScan) * uScanGroundGlow;
         } else {
@@ -668,5 +672,39 @@ totalEmissiveRadiance += vec3(0.4, 1.0, 0.75) * revealRing(vW.xz) * 2.0;`,
     'lamp',
   );
 
-  return { uniforms, building, buildingMid, buildingDetail, buildingPre, skirt, lamp, bridge, buildingDepth, ground, land, tree, treeDepth, car };
+  // La ville vue du ciel, la nuit : un point par lampadaire, toujours entre 1,6 et 3,4 pixels pour ne jamais
+  // scintiller, absent de près (les vrais lampadaires prennent le relais), estompé par le brouillard.
+  const lights = new THREE.ShaderMaterial({
+    uniforms,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    vertexShader: /* glsl */ `
+      attribute float aK;
+      uniform float uNight, uFogD, uDpr, uEdge;
+      uniform vec2 uFocus;
+      varying vec3 vCol;
+      void main() {
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vec4 mv = viewMatrix * wp;
+        gl_Position = projectionMatrix * mv;
+        float d = -mv.z;
+        float fog = max(1.0 - exp(-uFogD * uFogD * d * d), smoothstep(uEdge * 0.62, uEdge, length(wp.xz - uFocus)));
+        float led = step(1.5, aK);
+        float rnd = fract(sin(dot(wp.xz, vec2(12.9898, 78.233))) * 43758.5453);
+        float a = (aK - 2.0 * led) * (0.6 + 0.7 * rnd) * smoothstep(250.0, 900.0, d) * (1.0 - fog) * smoothstep(0.55, 1.0, uNight);
+        vCol = mix(vec3(1.0, 0.5, 0.18), vec3(1.0, 0.86, 0.68), led) * a * 1.8;
+        gl_PointSize = a > 0.0 ? uDpr * clamp(2600.0 / d, 0.8, 1.7) : 0.0;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      varying vec3 vCol;
+      void main() {
+        float r = length(gl_PointCoord - 0.5);
+        gl_FragColor = vec4(vCol * smoothstep(0.5, 0.1, r), 1.0);
+      }
+    `,
+  });
+
+  return { uniforms, lights, building, buildingMid, buildingDetail, buildingPre, skirt, lamp, bridge, buildingDepth, ground, land, tree, treeDepth, car };
 }

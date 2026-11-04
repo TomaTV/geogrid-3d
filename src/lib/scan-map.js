@@ -504,6 +504,8 @@ export function createScanMap(container, scan, options) {
       }
       e.treeMesh.visible = Math.hypot(edge, camera.position.y) < 3050;
     }
+    const lightsOn = currentPreset.night > 0.6 && camera.position.y > 60;
+    for (const e of tiles.values()) if (e.lightMesh) e.lightMesh.visible = lightsOn;
   }
 
   function groundMesh(part, material, order, origin) {
@@ -606,6 +608,21 @@ export function createScanMap(container, scan, options) {
       mesh.updateMatrix();
       add(mesh);
       entry.skirtMesh = mesh;
+    }
+    if (result.lights) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(result.lights.pos, 3));
+      g.setAttribute('aK', new THREE.BufferAttribute(result.lights.k, 1));
+      g.computeBoundingSphere();
+      for (const a of Object.values(g.attributes)) a.onUpload(freeAfterUpload);
+      const mesh = new THREE.Points(g, mats.lights);
+      mesh.position.set(result.origin[0], 0, result.origin[1]);
+      mesh.renderOrder = 20;
+      mesh.matrixAutoUpdate = false;
+      mesh.updateMatrix();
+      mesh.visible = false;
+      add(mesh);
+      entry.lightMesh = mesh;
     }
     if (result.lamps) {
       const g = new THREE.InstancedBufferGeometry();
@@ -1093,6 +1110,8 @@ export function createScanMap(container, scan, options) {
     }
     land.position.set(camera.position.x, 0, camera.position.z);
     scene.fog.density = (fogBase * FOG_SCALE) / Math.max(1, dist / 1500);
+    mats.uniforms.uFogD.value = scene.fog.density;
+    mats.uniforms.uDpr.value = dpr;
     focusCenter();
     mats.uniforms.uFocus.value.lerp(focusTo.set(focusAt.x, focusAt.z), 0.04);
     mats.uniforms.uFocusR.value += (focusRadius(dist) - mats.uniforms.uFocusR.value) * 0.04;

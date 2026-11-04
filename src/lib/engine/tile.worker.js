@@ -9,6 +9,8 @@ const ROADS = {
   motorway: [15, 7], trunk: [13, 6], primary: [12, 5], secondary: [10, 4], tertiary: [8.5, 3],
   minor: [6.5, 2], service: [3.6, 1], path: [2.2, 0], pedestrian: [3.5, 1],
 };
+// Éclairage public vu de haut, la nuit : un point tous les N mètres selon la classe de voie, et son poids.
+const LIGHTS = { motorway: [30, 1], trunk: [30, 1], primary: [26, 1], secondary: [28, 0.9], tertiary: [30, 0.8], minor: [34, 0.65], pedestrian: [38, 0.55], service: [55, 0.4] };
 const STREET_TREES = { primary: 0.8, secondary: 0.7, tertiary: 0.5, minor: 0.16 };
 const GREEN = {
   park: [0.1, 0.2, 0.075], wood: [0.05, 0.12, 0.05], forest: [0.05, 0.12, 0.05], grass: [0.13, 0.23, 0.085],
@@ -840,6 +842,39 @@ function placeLamps(lines, E, unit) {
   return inst.length ? new Float32Array(inst) : null;
 }
 
+function placeLights(lines, E, unit) {
+  const pos = [];
+  const k = [];
+  for (const l of lines) {
+    const def = LIGHTS[l.cls];
+    if (!def) continue;
+    const [step, weight] = def;
+    let along = 0;
+    let n = 0;
+    for (let i = 1; i < l.pts.length && k.length < 40000; i++) {
+      const a = l.pts[i - 1];
+      const b = l.pts[i];
+      const dx = (b[0] - a[0]) * unit;
+      const dz = (b[1] - a[1]) * unit;
+      const len = Math.hypot(dx, dz);
+      if (len < 0.01) continue;
+      const ux = dx / len;
+      const uz = dz / len;
+      for (let t = Math.ceil(along / step) * step - along; t < len; t += step) {
+        const x = a[0] * unit + ux * t;
+        const z = a[1] * unit + uz * t;
+        if (x < 0 || z < 0 || x > E * unit || z > E * unit) continue;
+        const off = (n++ % 2 ? 0.5 : -0.5) * l.width;
+        pos.push(x - uz * off, 0.6, z + ux * off);
+        // Un quart en LED blanches (k + 2), le reste en sodium orangé.
+        k.push(weight + (hash(Math.round(z), Math.round(x)) < 0.25 ? 2 : 0));
+      }
+      along += len;
+    }
+  }
+  return k.length ? { pos: new Float32Array(pos), k: new Float32Array(k) } : null;
+}
+
 function noise(x, y) {
   const ix = Math.floor(x);
   const iy = Math.floor(y);
@@ -992,6 +1027,7 @@ async function build(job) {
     skirts,
     cars: near ? placeCars(roadData.lines, E, unit) : null,
     lamps: near ? placeLamps(roadData.lines, E, unit) : null,
+    lights: job.z >= 13 ? placeLights(roadData.lines, E, unit) : null,
     trees,
   };
 }
@@ -999,7 +1035,7 @@ async function build(job) {
 function transferables(result) {
   const out = [];
   if (result.lamps) out.push(result.lamps.buffer);
-  for (const part of [result.ground, result.bridges, result.buildings, result.details, result.skirts, result.cars, result.trees]) {
+  for (const part of [result.ground, result.lights, result.bridges, result.buildings, result.details, result.skirts, result.cars, result.trees]) {
     if (!part) continue;
     for (const v of Object.values(part)) if (v && v.buffer) out.push(v.buffer);
   }
