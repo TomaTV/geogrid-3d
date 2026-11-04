@@ -533,12 +533,12 @@ function fillMesh(polys, unit, color) {
   const pos = [];
   const col = [];
   const idx = [];
-  for (const { poly, rgb } of polys) {
+  for (const { poly, rgb, trees = 0 } of polys) {
     const { flat, tris } = triangulate(poly);
     const v0 = pos.length / 3;
     for (let i = 0; i < flat.length; i += 2) {
       pos.push(flat[i] * unit, 0, flat[i + 1] * unit);
-      if (color) col.push(rgb[0], rgb[1], rgb[2]);
+      if (color) col.push(rgb[0], rgb[1], rgb[2], trees);
     }
     for (let i = 0; i < tris.length; i += 3) {
       const a = tris[i];
@@ -553,6 +553,35 @@ function fillMesh(polys, unit, color) {
   const nor = new Float32Array(pos.length);
   for (let i = 1; i < nor.length; i += 3) nor[i] = 1;
   return { pos: new Float32Array(pos), nor, col: color ? new Float32Array(col) : null, idx: new Uint32Array(idx) };
+}
+
+// Verdure, eau puis routes dans un seul maillage, dans l'ordre de dessin. aRoad.w : eau -2, verdure de -1 à -0,6
+// selon la densité d'arbres (couleur en xyz), route >= 0.
+function mergeGround(green, water, roads) {
+  const parts = [[green, -1], [water, -2], [roads, 0]].filter(([p]) => p);
+  if (!parts.length) return null;
+  const nv = parts.reduce((n, [p]) => n + p.pos.length / 3, 0);
+  const ni = parts.reduce((n, [p]) => n + p.idx.length, 0);
+  const pos = new Float32Array(nv * 3);
+  const nor = new Float32Array(nv * 3);
+  const road = new Float32Array(nv * 4);
+  const idx = new Uint32Array(ni);
+  let v = 0;
+  let i = 0;
+  for (const [p, kind] of parts) {
+    const n = p.pos.length / 3;
+    pos.set(p.pos, v * 3);
+    nor.set(p.nor, v * 3);
+    if (kind === 0) road.set(p.road, v * 4);
+    else {
+      if (p.col) road.set(p.col, v * 4);
+      for (let k = 0; k < n; k++) road[(v + k) * 4 + 3] = kind + (p.col ? p.col[k * 4 + 3] * 0.4 : 0);
+    }
+    for (let k = 0; k < p.idx.length; k++) idx[i + k] = p.idx[k] + v;
+    v += n;
+    i += p.idx.length;
+  }
+  return { pos, nor, road, idx };
 }
 
 // Ponts en volume : tablier, parapets et piles, avec une rampe à chaque bout.
@@ -928,10 +957,11 @@ async function build(job) {
       const rgb = GREEN[cls];
       if (!rgb) continue;
       for (const poly of polygonsOf(f, E)) {
-        greensDraw.push({ poly, rgb });
-        if (cls !== 'farmland' && cls !== 'pitch' && cls !== 'cemetery') {
-          greens.push({ poly, dense: cls === 'wood' || cls === 'forest' });
-        }
+        const dense = cls === 'wood' || cls === 'forest';
+        const treed = cls !== 'farmland' && cls !== 'pitch' && cls !== 'cemetery';
+        // Densité d'arbres portée par le sol : au-delà des arbres 3D, le shader y dessine une canopée.
+        greensDraw.push({ poly, rgb, trees: dense ? 1 : treed && cls !== 'grass' ? 0.5 : 0 });
+        if (treed) greens.push({ poly, dense });
       }
     }
   };
@@ -955,9 +985,7 @@ async function build(job) {
   return {
     origin: [ox, oz],
     size: tileMeters,
-    water: fillMesh(water, unit, false),
-    green: fillMesh(greensDraw, unit, true),
-    roads: roadData.mesh,
+    ground: mergeGround(fillMesh(greensDraw, unit, true), fillMesh(water, unit, false), roadData.mesh),
     bridges: roadData.bridges ?? null,
     buildings,
     details,
@@ -971,7 +999,7 @@ async function build(job) {
 function transferables(result) {
   const out = [];
   if (result.lamps) out.push(result.lamps.buffer);
-  for (const part of [result.water, result.green, result.roads, result.bridges, result.buildings, result.details, result.skirts, result.cars, result.trees]) {
+  for (const part of [result.ground, result.bridges, result.buildings, result.details, result.skirts, result.cars, result.trees]) {
     if (!part) continue;
     for (const v of Object.values(part)) if (v && v.buffer) out.push(v.buffer);
   }

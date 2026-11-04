@@ -106,6 +106,7 @@ uniform float uDisc;
 uniform float uTime;
 uniform vec2 uFocus;
 uniform float uFocusR;
+uniform float uEdge;
 vec4 sampleField(vec2 xz) {
   vec4 f = texture2D(uField, (xz - uFieldMin) / uFieldSpan);
   f.a *= smoothstep(uReveal, uReveal - 500.0, length(xz));
@@ -116,6 +117,15 @@ vec4 sampleField(vec2 xz) {
 float revealRing(vec2 xz) {
   return smoothstep(70.0, 0.0, abs(length(xz) - uReveal)) * step(uReveal, 14000.0);
 }
+`;
+
+// Brouillard habituel, plus un fondu complet avant le bord de la zone chargée : ni cercle ni fin de ville visibles.
+const EDGE_FOG = /* glsl */ `
+#ifdef USE_FOG
+  float fogFactor = 1.0 - exp(-fogDensity * fogDensity * vFogDepth * vFogDepth);
+  fogFactor = max(fogFactor, smoothstep(uEdge * 0.62, uEdge, length(vW.xz - uFocus)));
+  gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, fogFactor);
+#endif
 `;
 
 function patch(material, { uniforms, warp = true, vertexHead = '', normalBody = '', vertexBody = '', fragmentHead = '', color = '', emissive = '', normal = '' }, key) {
@@ -132,7 +142,8 @@ function patch(material, { uniforms, warp = true, vertexHead = '', normalBody = 
       .replace('#include <common>', `#include <common>\nvarying vec3 vW;\n${NOISE_FRAG}\n${FIELD}\n${fragmentHead}`)
       .replace('#include <color_fragment>', `#include <color_fragment>\n${color}`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${normal}`)
-      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${emissive}`);
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${emissive}`)
+      .replace('#include <fog_fragment>', EDGE_FOG);
   };
   material.customProgramCacheKey = () => key;
   return material;
@@ -150,21 +161,40 @@ function depthPatch(uniforms, head, body, key) {
   return m;
 }
 
+// Passage du détaillé (zoom 14) au simplifié (zoom 13) : chaque immeuble bascule entier, selon un bruit lent
+// propre à sa position, partagé par les deux versions. Pas de hauteurs intermédiaires ni d'anneau visible.
+const LOD = /* glsl */ `
+float lodHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float lodPick(vec2 p) {
+  p /= 240.0;
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float n = mix(mix(lodHash(i), lodHash(i + vec2(1.0, 0.0)), f.x), mix(lodHash(i + vec2(0.0, 1.0)), lodHash(i + vec2(1.0, 1.0)), f.x), f.y);
+  return 0.1 + 0.8 * n;
+}
+`;
 const GROW = /* glsl */ `
-float rim = smoothstep(uFocusR, uFocusR * 0.86, length((modelMatrix * vec4(aCenter.x, 0.0, aCenter.y, 1.0)).xz - uFocus));
+vec2 lodP = (modelMatrix * vec4(aCenter.x, 0.0, aCenter.y, 1.0)).xz;
+float rim = step(lodPick(lodP), smoothstep(uFocusR, uFocusR * 0.74, length(lodP - uFocus)));
 float grow = clamp((uTime - aMeta.w) / 1.3, 0.0, 1.0);
 grow = (1.0 - pow(1.0 - grow, 3.0)) * rim;
 if (rim <= 0.0) transformed = vec3(aCenter.x, 0.0, aCenter.y);
 else transformed.y *= max(grow, 0.002);
 `;
-const FOCUS = 'uniform vec2 uFocus; uniform float uFocusR;';
-// Lointain : apparaît là où les immeubles détaillés s'arrêtent.
+const FOCUS = `uniform vec2 uFocus; uniform float uFocusR; ${LOD}`;
+// Lointain : exactement les immeubles que le détaillé ne montre pas.
 const GROW_MID = /* glsl */ `
-float rim = smoothstep(uLodR * 0.86, uLodR, length((modelMatrix * vec4(aCenter.x, 0.0, aCenter.y, 1.0)).xz - uFocus));
+vec2 lodP = (modelMatrix * vec4(aCenter.x, 0.0, aCenter.y, 1.0)).xz;
+float rim = 1.0 - step(lodPick(lodP), smoothstep(uLodR, uLodR * 0.74, length(lodP - uFocus)));
 float grow = clamp((uTime - aMeta.w) / 1.3, 0.0, 1.0);
 grow = (1.0 - pow(1.0 - grow, 3.0)) * rim;
 if (rim <= 0.0) transformed = vec3(aCenter.x, 0.0, aCenter.y);
 else transformed.y *= max(grow, 0.002);
+`;
+// Cheminées et équipements : disparaissent immeuble par immeuble avec la distance, avant de devenir plus fins qu'un pixel.
+const DETAIL_FADE = /* glsl */ `
+if (lodHash(floor(lodP / 3.0)) >= smoothstep(1000.0, 620.0, distance(vec3(lodP.x, 15.0, lodP.y), cameraPosition))) transformed = vec3(aCenter.x, 0.0, aCenter.y);
 `;
 
 export function createMaterials(field) {
@@ -202,6 +232,7 @@ export function createMaterials(field) {
     uFocus: { value: new THREE.Vector2() },
     uFocusR: { value: 5000 },
     uPixel: { value: 0.0005 },
+    uEdge: { value: 2600 },
   };
 
   const buildingParts = {
@@ -311,11 +342,14 @@ export function createMaterials(field) {
     {
       ...buildingParts,
       uniforms: { ...uniforms, uFocusR: { value: 1e9 }, uLodR: uniforms.uFocusR },
-      vertexHead: 'attribute vec2 aWall; attribute vec2 aCenter; attribute vec4 aMeta; varying vec2 vWall; varying vec4 vMeta; uniform float uTime; uniform vec2 uFocus; uniform float uLodR;',
+      vertexHead: `attribute vec2 aWall; attribute vec2 aCenter; attribute vec4 aMeta; varying vec2 vWall; varying vec4 vMeta; uniform float uTime; uniform vec2 uFocus; uniform float uLodR; ${LOD}`,
       vertexBody: `${GROW_MID}\nvWall = aWall; vMeta = aMeta;`,
     },
     'building-mid',
   );
+  const buildingDetail = patch(new THREE.MeshLambertMaterial(), { ...buildingParts, vertexBody: `${GROW}
+${DETAIL_FADE}
+vWall = aWall; vMeta = aMeta;` }, 'building-detail');
   const skirt = new THREE.ShaderMaterial({
     uniforms: { uTime: uniforms.uTime },
     transparent: true,
@@ -347,12 +381,8 @@ export function createMaterials(field) {
   // Le sol teste la profondeur : après la pré-passe, il ne calcule plus les pixels cachés par un immeuble.
   const groundOpts = { depthTest: true, depthWrite: false };
 
-  const roadParts = {
-      uniforms,
-      vertexHead: 'attribute vec4 aRoad; varying vec4 vRoad;',
-      vertexBody: 'vRoad = aRoad;',
-      fragmentHead: 'varying vec4 vRoad; vec4 gF;',
-      color: /* glsl */ `
+  // Dérivées calculées avant tout branchement : dans une branche, elles ne sont pas fiables au bord des triangles.
+  const ROAD_PRE = /* glsl */ `
         gF = sampleField(vW.xz);
         float W = abs(vRoad.z);
         float halfW = W * 0.5;
@@ -360,6 +390,8 @@ export function createMaterials(field) {
         float aaX = fwidth(vRoad.x) * halfW;
         float aaY = fwidth(vRoad.y);
         float paintFade = 1.0 - smoothstep(0.12, 0.6, aaX);
+  `;
+  const ROAD_COLOR = /* glsl */ `
         if (vRoad.z < 0.0) {
           diffuseColor.rgb = texture(uGroundTex, vec3(vW.xz / 5.0, 4.0)).rgb;
         } else if (W < 4.0) {
@@ -387,31 +419,37 @@ export function createMaterials(field) {
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.34, 0.33, 0.31), curb * paintFade);
         }
         diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.5, gF.a * 0.4 * mix(uScanGround, 0.2, uScan) * (vRoad.z < 0.0 ? 0.5 : 0.12));
-      `,
-      emissive: /* glsl */ `
+  `;
+  const ROAD_EMISSIVE = /* glsl */ `
         totalEmissiveRadiance += vec3(0.9, 0.6, 0.3) * 0.05 * (1.0 - gF.a) * uNight;
         totalEmissiveRadiance += gF.rgb * 0.5 * gF.a * 0.4 * uScanRoad * (vRoad.z < 0.0 ? 0.2 : 0.04);
         if (W > 3.0 && uNight > 0.0) {
-          float visible = 1.0 - smoothstep(0.0, 0.5, fwidth(vRoad.y) / 8.0);
+          float visible = 1.0 - smoothstep(0.0, 0.5, aaY / 8.0);
           if (vRoad.z > 0.0) {
             float side = vRoad.x > 0.0 ? 1.0 : -1.0;
             float lane = 1.0 - smoothstep(0.12, 0.26, abs(abs(vRoad.x) - 0.5));
             float flow = fract(vRoad.y / 38.0 + side * uTime * 0.28 + floor(vRoad.y / 400.0) * 0.37);
             vec3 tone = side > 0.0 ? vec3(1.0, 0.9, 0.75) : vec3(1.0, 0.12, 0.08);
             // De près les voitures sont en 3D : ces traînées ne servent que de loin.
-            float farOnly = smoothstep(0.35, 0.9, fwidth(vRoad.y));
+            float farOnly = smoothstep(0.35, 0.9, aaY);
             // Traînée élargie à au moins un pixel, intensité réduite d'autant : même lumière moyenne, sans clignoter.
-            float fw = max(0.05, fwidth(vRoad.y) / 38.0 * 1.5);
+            float fw = max(0.05, aaY / 38.0 * 1.5);
             totalEmissiveRadiance += tone * smoothstep(fw, 0.0, abs(flow - 0.5)) * (0.05 / fw) * lane * visible * farOnly * uNight * 3.5;
           }
           float lampLine = vRoad.z > 0.0 ? W * 0.5 + 1.0 : W * 0.46;
           vec2 pool = vec2((fract(vRoad.y / 27.0) - 0.5) * 27.0 / 6.0, (abs(vRoad.x) * W * 0.5 - lampLine) / 4.0);
           totalEmissiveRadiance += vec3(1.0, 0.68, 0.4) * exp(-dot(pool, pool) * 2.0) * visible * uNight * 0.05;
         }
-        totalEmissiveRadiance += vec3(0.4, 1.0, 0.75) * revealRing(vW.xz) * 2.0;
-      `,
+  `;
+  const roadParts = {
+      uniforms,
+      vertexHead: 'attribute vec4 aRoad; varying vec4 vRoad;',
+      vertexBody: 'vRoad = aRoad;',
+      fragmentHead: 'varying vec4 vRoad; vec4 gF;',
+      color: ROAD_PRE + ROAD_COLOR,
+      emissive: `${ROAD_EMISSIVE}
+totalEmissiveRadiance += vec3(0.4, 1.0, 0.75) * revealRing(vW.xz) * 2.0;`,
   };
-  const roads = patch(new THREE.MeshLambertMaterial(groundOpts), roadParts, 'road');
   const bridge = patch(
     new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }),
     {
@@ -432,26 +470,6 @@ export function createMaterials(field) {
     totalEmissiveRadiance += vec3(0.4, 1.0, 0.75) * revealRing(vW.xz) * 2.0;
   `;
 
-  const green = patch(
-    new THREE.MeshLambertMaterial({ vertexColors: true, ...groundOpts }),
-    {
-      uniforms,
-      fragmentHead: 'vec4 gF;',
-      color: /* glsl */ `
-        gF = sampleField(vW.xz);
-        float big = fbm2(vW.xz * 0.012);
-        float mid = fbm2(vW.xz * 0.07);
-        diffuseColor.rgb *= texture(uGroundTex, vec3(vW.xz / 4.0, 5.0)).rgb * 2.3;
-        diffuseColor.rgb *= (0.86 + 0.28 * mid) * (0.9 + 0.2 * big);
-        float grassLuma = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(grassLuma) * vec3(1.05, 1.08, 0.72), 0.22 + 0.14 * big);
-        diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.45, gF.a * 0.25 * mix(uScanGround, 0.2, uScan));
-      `,
-      emissive: groundEmission,
-    },
-    'green',
-  );
-
   const land = patch(
     new THREE.MeshLambertMaterial({ color: 0x3a3836, ...groundOpts }),
     {
@@ -468,47 +486,86 @@ export function createMaterials(field) {
     'land',
   );
 
+  // Sol d'une tuile en un seul maillage et un seul appel : verdure, puis eau, puis trottoirs et chaussées, dessinés
+  // dans cet ordre sans écrire la profondeur. aRoad.w distingue le type : -1 verdure (couleur dans aRoad.xyz), -2 eau.
   // Eau : reflet du ciel (même dégradé que sky.js) par Fresnel, houle lente et large. Aucun détail plus fin
   // que quelques mètres, et la houle s'aplatit au loin : rien ne peut scintiller.
-  const water = patch(
-    new THREE.MeshLambertMaterial({ color: 0x0d2b38, ...groundOpts }),
+  const ground = patch(
+    new THREE.MeshLambertMaterial(groundOpts),
     {
       uniforms,
-      warp: false,
+      vertexHead: 'attribute vec4 aRoad; varying vec4 vRoad;',
+      vertexBody: 'vRoad = aRoad;',
+      fragmentHead: 'varying vec4 vRoad; vec4 gF; float gKind;',
+      color: /* glsl */ `
+        ${ROAD_PRE}
+        float gPix = length(fwidth(vW.xz));
+        gKind = vRoad.w < -1.5 ? 2.0 : vRoad.w < -0.5 ? 1.0 : 0.0;
+        if (gKind > 1.5) {
+          diffuseColor.rgb = vec3(0.004, 0.024, 0.04);
+        } else if (gKind > 0.5) {
+          diffuseColor.rgb = vRoad.rgb;
+          float big = fbm2(vW.xz * 0.012);
+          float mid = fbm2(vW.xz * 0.07);
+          diffuseColor.rgb *= texture(uGroundTex, vec3(vW.xz / 4.0, 5.0)).rgb * 2.3;
+          diffuseColor.rgb *= (0.86 + 0.28 * mid) * (0.9 + 0.2 * big);
+          float grassLuma = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(grassLuma) * vec3(1.05, 1.08, 0.72), 0.22 + 0.14 * big);
+          // Là où les arbres 3D s'arrêtent (bord de zone, distance), la verdure boisée prend l'aspect d'une canopée vue de haut.
+          float treeDensity = (vRoad.w + 1.0) / 0.4;
+          float treesShown = min(smoothstep(uFocusR, uFocusR * 0.7, length(vW.xz - uFocus)), smoothstep(3000.0, 2200.0, distance(vW, cameraPosition)));
+          float canopy = treeDensity * mix(1.0, smoothstep(0.42, 0.62, fbm2(vW.xz / 70.0)), step(treeDensity, 0.75)) * (1.0 - treesShown);
+          vec3 leaves = mix(vec3(0.07, 0.16, 0.05), vec3(0.15, 0.27, 0.08), fbm2(vW.xz / 11.0)) * (0.55 + 0.7 * fbm2(vW.xz / 4.5));
+          diffuseColor.rgb = mix(diffuseColor.rgb, leaves, canopy * 0.85);
+          diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.45, gF.a * 0.25 * mix(uScanGround, 0.2, uScan));
+        } else {
+          ${ROAD_COLOR}
+        }
+      `,
       emissive: /* glsl */ `
-        float wt = uTime * 0.05;
-        float calm = 1.0 - smoothstep(0.8, 8.0, length(fwidth(vW.xz)));
-        vec2 wp = vW.xz / 38.0 + vec2(wt, wt * 0.6);
-        vec2 wq = vW.xz / 15.0 - vec2(wt * 1.4, -wt);
-        float a0 = vnoise(wp);
-        float a1 = vnoise(wq);
-        vec2 grad = (vec2(vnoise(wp + vec2(0.2, 0.0)), vnoise(wp + vec2(0.0, 0.2))) - a0)
-          + 0.5 * (vec2(vnoise(wq + vec2(0.2, 0.0)), vnoise(wq + vec2(0.0, 0.2))) - a1);
-        vec3 wn = normalize(vec3(-grad.x * 1.1 * calm, 1.0, -grad.y * 1.1 * calm));
-        vec3 wv = normalize(vW - cameraPosition);
-        vec3 wr = reflect(wv, wn);
-        float wh = max(wr.y, 0.0);
-        float wside = pow(max(dot(normalize(vec3(wr.x, 0.0, wr.z) + 1e-4), normalize(vec3(uSunDir.x, 0.0, uSunDir.z) + 1e-4)) * 0.5 + 0.5, 0.0), 2.5);
-        vec3 wsky = mix(mix(uFogCol, uSkyHorizon, wside), uSky, smoothstep(0.0, 0.2, wh));
-        wsky = mix(wsky, uSkyZenith, smoothstep(0.12, 0.72, wh));
-        float fres = 0.04 + 0.96 * pow(1.0 - clamp(dot(-wv, wn), 0.0, 1.0), 5.0);
-        totalEmissiveRadiance += wsky * fres;
-        float sunR = max(dot(wr, uSunDir), 0.0);
-        totalEmissiveRadiance += uSunCol * (pow(sunR, 60.0) * 0.5 + pow(sunR, 600.0) * 3.0) * uDisc * fres * 3.0;
-        totalEmissiveRadiance += vec3(1.0, 0.66, 0.36) * smoothstep(0.45, 0.8, a1) * 0.035 * uNight * calm;
+        if (gKind > 1.5) {
+          float wt = uTime * 0.05;
+          float calm = 1.0 - smoothstep(0.8, 8.0, gPix);
+          vec2 wp = vW.xz / 38.0 + vec2(wt, wt * 0.6);
+          vec2 wq = vW.xz / 15.0 - vec2(wt * 1.4, -wt);
+          float a0 = vnoise(wp);
+          float a1 = vnoise(wq);
+          vec2 grad = (vec2(vnoise(wp + vec2(0.2, 0.0)), vnoise(wp + vec2(0.0, 0.2))) - a0)
+            + 0.5 * (vec2(vnoise(wq + vec2(0.2, 0.0)), vnoise(wq + vec2(0.0, 0.2))) - a1);
+          vec3 wn = normalize(vec3(-grad.x * 1.1 * calm, 1.0, -grad.y * 1.1 * calm));
+          vec3 wv = normalize(vW - cameraPosition);
+          vec3 wr = reflect(wv, wn);
+          float wh = max(wr.y, 0.0);
+          float wside = pow(max(dot(normalize(vec3(wr.x, 0.0, wr.z) + 1e-4), normalize(vec3(uSunDir.x, 0.0, uSunDir.z) + 1e-4)) * 0.5 + 0.5, 0.0), 2.5);
+          vec3 wsky = mix(mix(uFogCol, uSkyHorizon, wside), uSky, smoothstep(0.0, 0.2, wh));
+          wsky = mix(wsky, uSkyZenith, smoothstep(0.12, 0.72, wh));
+          float fres = 0.04 + 0.96 * pow(1.0 - clamp(dot(-wv, wn), 0.0, 1.0), 5.0);
+          totalEmissiveRadiance += wsky * fres;
+          float sunR = max(dot(wr, uSunDir), 0.0);
+          totalEmissiveRadiance += uSunCol * (pow(sunR, 60.0) * 0.5 + pow(sunR, 600.0) * 3.0) * uDisc * fres * 3.0;
+          totalEmissiveRadiance += vec3(1.0, 0.66, 0.36) * smoothstep(0.45, 0.8, a1) * 0.035 * uNight * calm;
+        } else if (gKind > 0.5) {
+          totalEmissiveRadiance += gF.rgb * gF.a * mix(uScanGround, 0.2, uScan) * uScanGroundGlow;
+        } else {
+          ${ROAD_EMISSIVE}
+        }
         totalEmissiveRadiance += vec3(0.4, 1.0, 0.75) * revealRing(vW.xz) * 2.0;
       `,
     },
-    'water',
+    'ground',
   );
 
-  const TREE_V = /* glsl */ `
+  // Les arbres s'éclaircissent un par un au bord de la zone détaillée et au loin, au lieu de rétrécir en anneau.
+  const treeV = (camera) => /* glsl */ `
     float ta = fract(aInst.x * 0.137 + aInst.y * 0.271) * 6.283;
     float tc = cos(ta);
     float ts = sin(ta);
     transformed = vec3(transformed.x * tc - transformed.z * ts, transformed.y, transformed.x * ts + transformed.z * tc);
+    vec2 tp = (modelMatrix * vec4(aInst.x, 0.0, aInst.y, 1.0)).xz;
+    float tk = smoothstep(uFocusR, uFocusR * 0.7, length(tp - uFocus));
+    ${camera ? 'tk = min(tk, smoothstep(3000.0, 2200.0, distance(vec3(tp.x, 0.0, tp.y), cameraPosition)));' : ''}
     float tg = clamp((uTime - aTree.y) / 1.1, 0.0, 1.0);
-    tg = (1.0 - pow(1.0 - tg, 3.0)) * smoothstep(uFocusR, uFocusR * 0.86, length((modelMatrix * vec4(aInst.x, 0.0, aInst.y, 1.0)).xz - uFocus));
+    tg = (1.0 - pow(1.0 - tg, 3.0)) * step(lodHash(floor(tp * 0.7)), tk);
     transformed = vec3(transformed.x * aInst.z, transformed.y * aInst.w, transformed.z * aInst.z) * tg + vec3(aInst.x, 0.0, aInst.y);
   `;
   const tree = patch(
@@ -521,7 +578,7 @@ export function createMaterials(field) {
         float na = fract(aInst.x * 0.137 + aInst.y * 0.271) * 6.283;
         objectNormal = vec3(objectNormal.x * cos(na) - objectNormal.z * sin(na), objectNormal.y, objectNormal.x * sin(na) + objectNormal.z * cos(na));
       `,
-      vertexBody: `vTreeY = position.y; vTone = aTree.x;\n${TREE_V}`,
+      vertexBody: `vTreeY = position.y; vTone = aTree.x;\n${treeV(true)}`,
       fragmentHead: 'varying float vTreeY; varying float vTone; float gLeaf;',
       // Normales cassées par le bruit : la lumière tombe par touffes plutôt que sur une boule lisse.
       normal: /* glsl */ `
@@ -547,7 +604,7 @@ export function createMaterials(field) {
     },
     'tree',
   );
-  const treeDepth = depthPatch(uniforms, `attribute vec4 aInst; attribute vec2 aTree; uniform float uTime; ${FOCUS}`, TREE_V, 'tree-depth');
+  const treeDepth = depthPatch(uniforms, `attribute vec4 aInst; attribute vec2 aTree; uniform float uTime; ${FOCUS}`, treeV(false), 'tree-depth');
 
   const car = patch(
     new THREE.MeshLambertMaterial(),
@@ -611,5 +668,5 @@ export function createMaterials(field) {
     'lamp',
   );
 
-  return { uniforms, building, buildingMid, buildingPre, skirt, lamp, bridge, buildingDepth, roads, green, land, water, tree, treeDepth, car };
+  return { uniforms, building, buildingMid, buildingDetail, buildingPre, skirt, lamp, bridge, buildingDepth, ground, land, tree, treeDepth, car };
 }

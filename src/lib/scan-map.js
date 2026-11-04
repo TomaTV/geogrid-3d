@@ -384,13 +384,22 @@ export function createScanMap(container, scan, options) {
   const exclude = [[...proj.toWorld(2.2945, 48.85826), 135]];
   const look = new THREE.Vector3();
   const focusTo = new THREE.Vector2();
-  const focusRadius = (dist) => (introDone ? THREE.MathUtils.clamp(dist * 2.2, 1400, 3200) : 2600);
+  const focusRadius = (dist) => (introDone ? THREE.MathUtils.clamp(dist * 2.1, 1400, 3000) : 2600);
+  let edgeTo = 2600;
+  // La zone détaillée se centre un peu devant la cible, du côté où regarde la caméra : plus de détail dans le champ, moins derrière.
+  const focusAt = new THREE.Vector3();
+  function focusCenter() {
+    const t = controls.target;
+    camera.getWorldDirection(look);
+    const len = Math.hypot(look.x, look.z);
+    const ahead = introDone && len > 0.05 ? (focusRadius(camera.position.distanceTo(t)) * 0.25 * Math.min(1, len / 0.7)) / len : 0;
+    return focusAt.set(t.x + look.x * ahead, 0, t.z + look.z * ahead);
+  }
   function refreshTiles() {
     if (!template) return;
-    const t = controls.target;
-    const dist = camera.position.distanceTo(t);
+    const dist = camera.position.distanceTo(controls.target);
+    const t = focusCenter();
     const R = focusRadius(dist);
-    camera.getWorldDirection(look);
     // Seules les tuiles dans le champ se chargent ; celles déjà chargées restent pour un retour immédiat.
     const lookLen = Math.hypot(look.x, look.z) || 1;
     const lx = look.x / lookLen;
@@ -441,6 +450,7 @@ export function createScanMap(container, scan, options) {
       }
     }
     lastWanted = wantedNear;
+    edgeTo = introDone ? midR : R;
 
     const farSize = proj.tileMeters(FAR_ZOOM);
     const [fx, fy] = proj.tileAt(t.x, t.z, FAR_ZOOM);
@@ -475,24 +485,24 @@ export function createScanMap(container, scan, options) {
         .forEach(([e]) => dropTile(e));
     }
     for (const e of near) {
-      const d = Math.hypot(e.cx - camera.position.x, e.cz - camera.position.z);
       // Une tuile fait 1,6 km : on mesure jusqu'à son bord, pas jusqu'à son centre, sinon celle survolée reste masquée.
       const edge = Math.hypot(Math.max(Math.abs(e.cx - camera.position.x) - size / 2, 0), Math.max(Math.abs(e.cz - camera.position.z) - size / 2, 0));
       const low = camera.position.y < 1100;
-      if (e.detailMesh) e.detailMesh.visible = extrasOn && edge < 1100;
+      // Les shaders effacent cheminées, lampadaires et arbres un par un avant ces distances : la tuile entière ne disparaît jamais d'un coup.
+      if (e.detailMesh) e.detailMesh.visible = extrasOn && Math.hypot(edge, camera.position.y) < 1050;
       if (e.preMesh) e.preMesh.visible = edge < 600;
       if (e.skirtMesh) e.skirtMesh.visible = extrasOn && edge < 1100;
       if (e.carMesh) e.carMesh.visible = extrasOn && low && edge < 900;
       if (e.lampMesh) e.lampMesh.visible = extrasOn && low && edge < 950;
       if (!e.treeMesh) continue;
-      const useNear = d < 900;
+      const useNear = edge < 60 && camera.position.y < 180;
       const geo = useNear ? e.treeNear : e.treeFar;
       if (e.treeMesh.geometry !== geo) {
         e.treeMesh.geometry = geo;
         e.treeMesh.castShadow = useNear;
         shadowDirty = true;
       }
-      e.treeMesh.visible = d < 3200;
+      e.treeMesh.visible = Math.hypot(edge, camera.position.y) < 3050;
     }
   }
 
@@ -500,7 +510,6 @@ export function createScanMap(container, scan, options) {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(part.pos, 3));
     g.setAttribute('normal', new THREE.BufferAttribute(part.nor, 3));
-    if (part.col) g.setAttribute('color', new THREE.BufferAttribute(part.col, 3));
     if (part.road) g.setAttribute('aRoad', new THREE.BufferAttribute(part.road, 4));
     g.setIndex(new THREE.BufferAttribute(part.idx, 1));
     g.computeBoundingSphere();
@@ -521,9 +530,7 @@ export function createScanMap(container, scan, options) {
       entry.meshes.push(m);
     };
     const base = z === NEAR_ZOOM ? 0 : z === MID_ZOOM ? -15 : -30;
-    if (result.green) add(groundMesh(result.green, mats.green, -60 + base, result.origin));
-    if (result.water) add(groundMesh(result.water, mats.water, -55 + base, result.origin));
-    if (result.roads) add(groundMesh(result.roads, mats.roads, -50 + base, result.origin));
+    if (result.ground) add(groundMesh(result.ground, mats.ground, -60 + base, result.origin));
     if (result.bridges) {
       const m = groundMesh(result.bridges, mats.bridge, 5, result.origin);
       m.castShadow = true;
@@ -575,7 +582,7 @@ export function createScanMap(container, scan, options) {
       g.setAttribute('aCenter', new THREE.BufferAttribute(d.center, 2));
       g.setIndex(new THREE.BufferAttribute(d.idx, 1));
       g.computeBoundingSphere();
-      const mesh = new THREE.Mesh(g, mats.building);
+      const mesh = new THREE.Mesh(g, mats.buildingDetail);
       mesh.position.set(result.origin[0], 0, result.origin[1]);
       mesh.receiveShadow = true;
       mesh.matrixAutoUpdate = false;
@@ -1086,8 +1093,10 @@ export function createScanMap(container, scan, options) {
     }
     land.position.set(camera.position.x, 0, camera.position.z);
     scene.fog.density = (fogBase * FOG_SCALE) / Math.max(1, dist / 1500);
-    mats.uniforms.uFocus.value.lerp(focusTo.set(controls.target.x, controls.target.z), 0.04);
+    focusCenter();
+    mats.uniforms.uFocus.value.lerp(focusTo.set(focusAt.x, focusAt.z), 0.04);
     mats.uniforms.uFocusR.value += (focusRadius(dist) - mats.uniforms.uFocusR.value) * 0.04;
+    mats.uniforms.uEdge.value += (edgeTo - mats.uniforms.uEdge.value) * 0.04;
     mats.uniforms.uPixel.value = (2 * Math.tan((camera.fov * Math.PI) / 360)) / (container.clientHeight * dpr || 1);
 
     if (now > refreshAt) {
