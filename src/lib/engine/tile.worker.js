@@ -4,11 +4,16 @@ import earcut from 'earcut';
 
 const C = 40075016.686;
 const RASTER = 512;
+const FAR = 11;
 
 const ROADS = {
   motorway: [15, 7], trunk: [13, 6], primary: [12, 5], secondary: [10, 4], tertiary: [8.5, 3],
-  minor: [6.5, 2], service: [3.6, 1], path: [2.2, 0], pedestrian: [3.5, 1],
+  minor: [6.5, 2], service: [3.8, 1], path: [2.2, 0], pedestrian: [3.4, 1],
 };
+// Largeurs repérées par le shader : moins de 2,6 m sable des allées, jusqu'à 3,6 m pavés, au-delà bitume.
+const RAIL = { rail: 3.4, transit: 3.2 };
+// Zones bâties du zoom 11 : vues de très loin, au-delà des derniers immeubles, elles gardent l'aspect d'une ville.
+const URBAN = new Set(['residential', 'commercial', 'industrial', 'retail', 'railway']);
 // Éclairage public vu de haut, la nuit : un point tous les N mètres selon la classe de voie, et son poids.
 const LIGHTS = { motorway: [30, 1], trunk: [30, 1], primary: [26, 1], secondary: [28, 0.9], tertiary: [30, 0.8], minor: [34, 0.65], pedestrian: [38, 0.55], service: [55, 0.4] };
 const STREET_TREES = { primary: 0.8, secondary: 0.7, tertiary: 0.5, minor: 0.16 };
@@ -219,7 +224,7 @@ class Raster {
   }
 }
 
-function buildBuildings(layer, E, unit, ox, oz, job, raster) {
+function buildBuildings(layer, E, unit, ox, oz, job, raster, stations) {
   const pos = [];
   const nor = [];
   const wall = [];
@@ -464,7 +469,9 @@ function buildBuildings(layer, E, unit, ox, oz, job, raster) {
           }
         }
         const roofY = parapet ? h - 0.9 : h;
-        const topType = inset && slopeType === 2 ? 2 : 1;
+        // Grand bâtiment qui contient une gare : verrière de halle.
+        const station = !inset && fullArea > 2500 && stations.some(([x, y]) => ringContains(outer, x, y));
+        const topType = inset && slopeType === 2 ? 2 : station ? 6 : 1;
         const { flat, tris } = triangulate(parapet ? [parapet] : inset ? [inset] : poly);
         const v0 = pos.length / 3;
         for (let i = 0; i < flat.length; i += 2) {
@@ -559,8 +566,8 @@ function fillMesh(polys, unit, color) {
 
 // Verdure, eau puis routes dans un seul maillage, dans l'ordre de dessin. aRoad.w : eau -2, verdure de -1 à -0,6
 // selon la densité d'arbres (couleur en xyz), route >= 0.
-function mergeGround(green, water, roads) {
-  const parts = [[green, -1], [water, -2], [roads, 0]].filter(([p]) => p);
+function mergeGround(urban, green, water, squares, roads) {
+  const parts = [[urban, -3], [green, -1], [water, -2], [squares, 1], [roads, 0]].filter(([p]) => p);
   if (!parts.length) return null;
   const nv = parts.reduce((n, [p]) => n + p.pos.length / 3, 0);
   const ni = parts.reduce((n, [p]) => n + p.idx.length, 0);
@@ -575,6 +582,7 @@ function mergeGround(green, water, roads) {
     pos.set(p.pos, v * 3);
     nor.set(p.nor, v * 3);
     if (kind === 0) road.set(p.road, v * 4);
+    else if (kind === 1) for (let k = 0; k < n; k++) road.set([0, 0, 3.4, 1000], (v + k) * 4);
     else {
       if (p.col) road.set(p.col, v * 4);
       for (let k = 0; k < n; k++) road[(v + k) * 4 + 3] = kind + (p.col ? p.col[k * 4 + 3] * 0.4 : 0);
@@ -584,6 +592,64 @@ function mergeGround(green, water, roads) {
     i += p.idx.length;
   }
   return { pos, nor, road, idx };
+}
+
+// Quais de gare : dalles de 0,95 m de haut, dessus et flancs en pierre claire (matériau des ponts).
+function buildPlatforms(polys, unit) {
+  const pos = [];
+  const nor = [];
+  const road = [];
+  const idx = [];
+  const H = 0.95;
+  for (const { poly } of polys) {
+    const { flat, tris } = triangulate(poly);
+    const v0 = pos.length / 3;
+    for (let i = 0; i < flat.length; i += 2) {
+      pos.push(flat[i] * unit, H, flat[i + 1] * unit);
+      nor.push(0, 1, 0);
+      road.push(0, 0, -6, 0);
+    }
+    for (let i = 0; i < tris.length; i += 3) {
+      const [a, b, c] = [tris[i], tris[i + 1], tris[i + 2]];
+      const cross = (flat[b * 2 + 1] - flat[a * 2 + 1]) * (flat[c * 2] - flat[a * 2]) - (flat[b * 2] - flat[a * 2]) * (flat[c * 2 + 1] - flat[a * 2 + 1]);
+      if (cross >= 0) idx.push(v0 + a, v0 + b, v0 + c);
+      else idx.push(v0 + a, v0 + c, v0 + b);
+    }
+    for (const ring of poly) {
+      for (let i = 0; i < ring.length; i++) {
+        const p = ring[i];
+        const q = ring[(i + 1) % ring.length];
+        const dx = (q[0] - p[0]) * unit;
+        const dz = (q[1] - p[1]) * unit;
+        const len = Math.hypot(dx, dz);
+        if (len < 0.01) continue;
+        const v = pos.length / 3;
+        pos.push(p[0] * unit, 0, p[1] * unit, q[0] * unit, 0, q[1] * unit, q[0] * unit, H, q[1] * unit, p[0] * unit, H, p[1] * unit);
+        for (let k = 0; k < 4; k++) {
+          nor.push(dz / len, 0, -dx / len);
+          road.push(0, 0, -6, 0);
+        }
+        idx.push(v, v + 1, v + 2, v, v + 2, v + 3);
+      }
+    }
+  }
+  return idx.length ? { pos, nor, road, idx } : null;
+}
+
+function concatParts(a, b) {
+  if (!a) return b && { pos: new Float32Array(b.pos), nor: new Float32Array(b.nor), road: new Float32Array(b.road), idx: new Uint32Array(b.idx) };
+  if (!b) return a;
+  const n = a.pos.length / 3;
+  const idx = new Uint32Array(a.idx.length + b.idx.length);
+  idx.set(a.idx);
+  for (let i = 0; i < b.idx.length; i++) idx[a.idx.length + i] = b.idx[i] + n;
+  const join = (x, y) => {
+    const out = new Float32Array(x.length + y.length);
+    out.set(x);
+    out.set(y, x.length);
+    return out;
+  };
+  return { pos: join(a.pos, b.pos), nor: join(a.nor, b.nor), road: join(a.road, b.road), idx };
 }
 
 // Ponts en volume : tablier, parapets et piles, avec une rampe à chaque bout.
@@ -699,9 +765,14 @@ function buildBridges(lines, E, unit) {
 
 function buildRoads(layer, E, unit, raster) {
   const lines = [];
+  const rails = [];
   for (let i = 0; i < layer.length; i++) {
     const f = layer.feature(i);
     if (f.type !== 2 || f.properties.brunnel === 'tunnel') continue;
+    if (RAIL[f.properties.class] && f.properties.brunnel !== 'bridge') {
+      for (const line of f.loadGeometry()) rails.push({ pts: line.map((p) => [p.x, p.y]), width: RAIL[f.properties.class] });
+      continue;
+    }
     const def = ROADS[f.properties.class];
     if (!def) continue;
     const width = f.properties.ramp ? def[0] * 0.6 : def[0];
@@ -713,7 +784,7 @@ function buildRoads(layer, E, unit, raster) {
   const pos = [];
   const road = [];
   const idx = [];
-  const emit = (l, width, paved) => {
+  const emit = (l, width, paved, kind = null) => {
     const hw = width / 2 / unit;
     const pts = l.pts;
     if (pts.length < 2) return;
@@ -749,7 +820,7 @@ function buildRoads(layer, E, unit, raster) {
       if (i > 0) along += Math.hypot(c[0] - p[0], c[1] - p[1]) * unit;
       pos.push((c[0] + lx) * unit, 0, (c[1] + lz) * unit, (c[0] - lx) * unit, 0, (c[1] - lz) * unit);
       const z = paved ? -width : width;
-      road.push(-1, along, z, end - along, 1, along, z, end - along);
+      road.push(-1, along, z, kind ?? end - along, 1, along, z, kind ?? end - along);
       if (i > 0) {
         const v = v0 + (i - 1) * 2;
         idx.push(v, v + 2, v + 1, v + 1, v + 2, v + 3);
@@ -758,6 +829,8 @@ function buildRoads(layer, E, unit, raster) {
     }
   };
   // Tous les trottoirs d'abord, toute la chaussée ensuite : aux carrefours, le bitume recouvre les trottoirs des rues voisines.
+  // Voies ferrées d'abord (aRoad.w = -4) : la chaussée les recouvre aux passages à niveau.
+  for (const l of rails) emit(l, l.width, false, -4);
   for (const l of lines) if (l.width > 5 && !l.bridge) emit(l, l.width, true);
   for (const l of lines) if (!l.bridge) emit(l, l.width > 5 ? l.width - 2 * Math.min(Math.max(l.width * 0.16, 1), 2.6) : l.width, false);
   const bridges = buildBridges(lines, E, unit);
@@ -842,7 +915,7 @@ function placeLamps(lines, E, unit) {
   return inst.length ? new Float32Array(inst) : null;
 }
 
-function placeLights(lines, E, unit) {
+function placeLights(lines, E, unit, far) {
   const pos = [];
   const k = [];
   for (const l of lines) {
@@ -866,8 +939,8 @@ function placeLights(lines, E, unit) {
         if (x < 0 || z < 0 || x > E * unit || z > E * unit) continue;
         const off = (n++ % 2 ? 0.5 : -0.5) * l.width;
         pos.push(x - uz * off, 0.6, z + ux * off);
-        // Un quart en LED blanches (k + 2), le reste en sodium orangé.
-        k.push(weight + (hash(Math.round(z), Math.round(x)) < 0.25 ? 2 : 0));
+        // Un quart en LED blanches (k + 2), le reste en sodium orangé ; k + 4 pour le zoom 11, affiché seulement au-delà du zoom 13.
+        k.push(weight + (hash(Math.round(z), Math.round(x)) < 0.25 ? 2 : 0) + (far ? 4 : 0));
       }
       along += len;
     }
@@ -1004,11 +1077,40 @@ async function build(job) {
   addGreen(tile.layers.landuse, (p) => p.class);
   addGreen(tile.layers.park, () => 'park');
 
+  const urban = [];
+  if (job.z <= FAR && tile.layers.landuse) {
+    const l = tile.layers.landuse;
+    for (let i = 0; i < l.length; i++) {
+      const f = l.feature(i);
+      if (f.type === 3 && URBAN.has(f.properties.class)) for (const poly of polygonsOf(f, E)) urban.push({ poly });
+    }
+  }
+  // Places piétonnes en pavés, quais de gare en relief.
+  const squares = [];
+  const platforms = [];
+  if (job.z >= 13 && tile.layers.transportation) {
+    const l = tile.layers.transportation;
+    for (let i = 0; i < l.length; i++) {
+      const f = l.feature(i);
+      if (f.type !== 3 || f.properties.brunnel === 'tunnel' || f.properties.class !== 'path') continue;
+      if (f.properties.subclass === 'pedestrian') for (const poly of polygonsOf(f, E)) squares.push({ poly });
+      else if (f.properties.subclass === 'platform' && job.z >= 14) for (const poly of polygonsOf(f, E)) platforms.push({ poly });
+    }
+  }
+
   const near = job.z >= 14;
   if (near) for (const g of greens) raster.fill(g.poly[0], 2);
 
   const roadData = tile.layers.transportation ? buildRoads(tile.layers.transportation, E, unit, near ? raster : null) : { mesh: null, lines: [] };
-  const buildings = job.z >= 13 && tile.layers.building ? buildBuildings(tile.layers.building, E, unit, ox, oz, job, raster) : null;
+  const stations = [];
+  if (tile.layers.poi) {
+    const l = tile.layers.poi;
+    for (let i = 0; i < l.length; i++) {
+      const f = l.feature(i);
+      if (f.properties.class === 'railway' && f.properties.subclass === 'station') stations.push(...f.loadGeometry()[0].map((p) => [p.x, p.y]));
+    }
+  }
+  const buildings = job.z >= 13 && tile.layers.building ? buildBuildings(tile.layers.building, E, unit, ox, oz, job, raster, stations) : null;
   const trees = near ? plantTrees(greens, roadData.lines, E, unit, ox, oz, raster, job) : null;
   const details = buildings?.detail ?? null;
   const skirts = buildings?.skirt ?? null;
@@ -1020,14 +1122,14 @@ async function build(job) {
   return {
     origin: [ox, oz],
     size: tileMeters,
-    ground: mergeGround(fillMesh(greensDraw, unit, true), fillMesh(water, unit, false), roadData.mesh),
-    bridges: roadData.bridges ?? null,
+    ground: mergeGround(fillMesh(urban, unit, false), fillMesh(greensDraw, unit, true), fillMesh(water, unit, false), fillMesh(squares, unit, false), roadData.mesh),
+    bridges: concatParts(roadData.bridges ?? null, buildPlatforms(platforms, unit)),
     buildings,
     details,
     skirts,
     cars: near ? placeCars(roadData.lines, E, unit) : null,
     lamps: near ? placeLamps(roadData.lines, E, unit) : null,
-    lights: job.z >= 13 ? placeLights(roadData.lines, E, unit) : null,
+    lights: placeLights(roadData.lines, E, unit, job.z < 13),
     trees,
   };
 }

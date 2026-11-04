@@ -8,7 +8,7 @@ export const PRESETS = {
     colors: { mix: 0.48, glow: 0.05, win: 0.55 },
   },
   dusk: {
-    elevation: 9, azimuth: 248, sun: '#ffb98c', sunPower: 3.1, envPower: 0.85, hemi: '#97a0c4', night: 0.45, stars: 0.12, sunDisc: 1,
+    elevation: 9, azimuth: 248, sun: '#ffb98c', sunPower: 3.4, envPower: 0.72, hemi: '#97a0c4', night: 0.45, stars: 0.12, sunDisc: 1,
     zenith: '#17294f', mid: '#59608a', horizon: '#f08f58', fog: '#5d5a6c', fogDensity: 0.00036, exposure: 1.0, bloom: 0.22, clouds: '#ff9c72',
     scan: { road: 0, ground: 0, groundGlow: 0, wall: 0, win: 0, facade: 0.35, shop: 0.7, winGlow: 0.8, roof: 0, facadeScan: 0 },
     colors: { mix: 0.52, glow: 0.05, win: 0.4, sun: '#ffdcc4', sunPower: 2.1, hemi: '#9aa0b4', exposure: 0.95, bloom: 0.1, fogDensity: 0.00026 },

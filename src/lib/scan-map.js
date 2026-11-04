@@ -383,23 +383,25 @@ export function createScanMap(container, scan, options) {
   };
   const exclude = [[...proj.toWorld(2.2945, 48.85826), 135]];
   const look = new THREE.Vector3();
-  const focusTo = new THREE.Vector2();
-  const focusRadius = (dist) => (introDone ? THREE.MathUtils.clamp(dist * 2.0, 1300, 2800) : 2600);
-  let edgeTo = 2600;
-  // La zone détaillée se centre un peu devant la cible, du côté où regarde la caméra : plus de détail dans le champ, moins derrière.
-  const focusAt = new THREE.Vector3();
-  function focusCenter() {
-    const t = controls.target;
-    camera.getWorldDirection(look);
-    const len = Math.hypot(look.x, look.z);
-    const ahead = introDone && len > 0.05 ? (focusRadius(camera.position.distanceTo(t)) * 0.25 * Math.min(1, len / 0.7)) / len : 0;
-    return focusAt.set(t.x + look.x * ahead, 0, t.z + look.z * ahead);
+  // Le détail ne dépend que de la distance à la caméra : immeubles complets dans une sphère de rayon focusRadius,
+  // volumes simples jusqu'à midR, sol du zoom 11 jusqu'au bord, qui se fond dans le brouillard.
+  const focusRadius = (dist) => THREE.MathUtils.clamp(dist * 1.5 + 900, 1500, 4000);
+  const midRadius = (dist) => THREE.MathUtils.clamp(dist * 4, 8000, 18000);
+  const lodCam = new THREE.Vector3();
+  let edgeTo = 12000;
+  function lodCamera() {
+    // Pendant l'arrivée, le détail est déjà réglé sur le point d'arrivée de la caméra.
+    return introDone ? lodCam.copy(camera.position) : lodCam.copy(endPos);
   }
+  const rectDist = (cx, cz, half, px, pz) => Math.hypot(Math.max(Math.abs(cx - px) - half, 0), Math.max(Math.abs(cz - pz) - half, 0));
+  const rectFar = (cx, cz, half, px, pz) => Math.hypot(Math.abs(cx - px) + half, Math.abs(cz - pz) + half);
   function refreshTiles() {
     if (!template) return;
     const dist = camera.position.distanceTo(controls.target);
-    const t = focusCenter();
-    const R = focusRadius(dist);
+    const c = lodCamera();
+    const R = focusRadius(introDone ? dist : endPos.length());
+    const midR = midRadius(dist);
+    camera.getWorldDirection(look);
     // Seules les tuiles dans le champ se chargent ; celles déjà chargées restent pour un retour immédiat.
     const lookLen = Math.hypot(look.x, look.z) || 1;
     const lx = look.x / lookLen;
@@ -414,35 +416,32 @@ export function createScanMap(container, scan, options) {
       return d < radius * 1.5 || (tx * lx + tz * lz) / d > coneCos - radius / d;
     };
     const size = proj.tileMeters(NEAR_ZOOM);
-    const [cx, cy] = proj.tileAt(t.x, t.z, NEAR_ZOOM);
-    const span = Math.ceil(R / size) + 1;
+    const groundR = Math.sqrt(Math.max(R * R - c.y * c.y, 0));
+    const [cx, cy] = proj.tileAt(c.x, c.z, NEAR_ZOOM);
+    const span = Math.ceil(groundR / size) + 1;
     const wantedNear = new Set();
-    if (dist < 12500) {
-      for (let x = cx - span; x <= cx + span; x++) {
-        for (let y = cy - span; y <= cy + span; y++) {
-          const [ox, oz] = proj.tileOrigin(x, y, NEAR_ZOOM);
-          const mx = ox + size / 2;
-          const mz = oz + size / 2;
-          const d = Math.hypot(mx - t.x, mz - t.z);
-          if (d > R + size * 0.75 || !inView(mx, mz, size * 0.75)) continue;
-          const key = NEAR_ZOOM + '/' + x + '/' + y;
-          wantedNear.add(key);
-          enqueue(NEAR_ZOOM, x, y, d, () => lastWanted.has(key));
-        }
+    for (let x = cx - span; x <= cx + span && groundR > 0; x++) {
+      for (let y = cy - span; y <= cy + span; y++) {
+        const [ox, oz] = proj.tileOrigin(x, y, NEAR_ZOOM);
+        const d = rectDist(ox + size / 2, oz + size / 2, size / 2, c.x, c.z);
+        if (Math.hypot(d, c.y) > R + 100 || !inView(ox + size / 2, oz + size / 2, size * 0.75)) continue;
+        const key = NEAR_ZOOM + '/' + x + '/' + y;
+        wantedNear.add(key);
+        enqueue(NEAR_ZOOM, x, y, d, () => lastWanted.has(key));
       }
     }
     const midSize = proj.tileMeters(MID_ZOOM);
-    const midR = THREE.MathUtils.clamp(dist * 4, 8000, 18000);
     if (introDone) {
-      const [mx0, my0] = proj.tileAt(t.x, t.z, MID_ZOOM);
+      const [mx0, my0] = proj.tileAt(c.x, c.z, MID_ZOOM);
       const midSpan = Math.ceil(midR / midSize) + 1;
       for (let x = mx0 - midSpan; x <= mx0 + midSpan; x++) {
         for (let y = my0 - midSpan; y <= my0 + midSpan; y++) {
           const [ox, oz] = proj.tileOrigin(x, y, MID_ZOOM);
           const mx = ox + midSize / 2;
           const mz = oz + midSize / 2;
-          const d = Math.hypot(mx - t.x, mz - t.z);
-          if (d > midR + midSize * 0.7 || d + midSize * 0.7 < R * 0.8 || !inView(mx, mz, midSize * 0.7)) continue;
+          const d = rectDist(mx, mz, midSize / 2, c.x, c.z);
+          // Inutile si la tuile entière reste dans la zone des immeubles complets.
+          if (d > midR || Math.hypot(rectFar(mx, mz, midSize / 2, c.x, c.z), c.y) < R * 0.72 || !inView(mx, mz, midSize * 0.7)) continue;
           const key = MID_ZOOM + '/' + x + '/' + y;
           wantedNear.add(key);
           enqueue(MID_ZOOM, x, y, 300000 + d, () => lastWanted.has(key));
@@ -450,43 +449,47 @@ export function createScanMap(container, scan, options) {
       }
     }
     lastWanted = wantedNear;
-    edgeTo = introDone ? midR : R;
 
+    // Sol lointain : 3x3 tuiles de zoom 11 de près, 5x5 au dézoom, pour qu'il y ait toujours une ville jusqu'au brouillard.
     const farSize = proj.tileMeters(FAR_ZOOM);
-    const [fx, fy] = proj.tileAt(t.x, t.z, FAR_ZOOM);
-    for (let x = fx - 1; x <= fx + 1; x++) {
-      for (let y = fy - 1; y <= fy + 1; y++) {
+    const farN = dist > 3500 ? 2 : 1;
+    const [fx, fy] = proj.tileAt(c.x, c.z, FAR_ZOOM);
+    for (let x = fx - farN; x <= fx + farN; x++) {
+      for (let y = fy - farN; y <= fy + farN; y++) {
         const [ox, oz] = proj.tileOrigin(x, y, FAR_ZOOM);
-        enqueue(FAR_ZOOM, x, y, 200000 + Math.hypot(ox + farSize / 2 - t.x, oz + farSize / 2 - t.z), () => Math.hypot(ox + farSize / 2 - controls.target.x, oz + farSize / 2 - controls.target.z) < farSize * 3);
+        const d = Math.hypot(ox + farSize / 2 - c.x, oz + farSize / 2 - c.z);
+        enqueue(FAR_ZOOM, x, y, 200000 + d, () => Math.hypot(ox + farSize / 2 - camera.position.x, oz + farSize / 2 - camera.position.z) < farSize * (farN + 1.5));
       }
     }
+    edgeTo = farSize * farN;
+    mats.uniforms.uMidR.value = midR;
     queue.sort((a, b) => a.priority - b.priority);
     for (const w of workers) if (!w.busy) launch(w);
 
-    for (const e of [...tiles.values()]) if (e.z !== NEAR_ZOOM && Math.hypot(e.cx - t.x, e.cz - t.z) > farSize * 3) dropTile(e);
+    for (const e of [...tiles.values()]) if (e.z === FAR_ZOOM && Math.hypot(e.cx - c.x, e.cz - c.z) > farSize * (farN + 1.5)) dropTile(e);
     const mids = [...tiles.values()].filter((e) => e.z === MID_ZOOM);
     for (const e of mids) {
-      const d = Math.hypot(e.cx - t.x, e.cz - t.z);
-      if (d > midR * 1.3 + midSize || d + midSize * 0.7 < R * 0.7) dropTile(e);
+      if (rectDist(e.cx, e.cz, midSize / 2, c.x, c.z) > midR * 1.15 || Math.hypot(rectFar(e.cx, e.cz, midSize / 2, c.x, c.z), c.y) < R * 0.68) dropTile(e);
     }
-    const behindFirst = (e) => Math.hypot(e.cx - t.x, e.cz - t.z) * (inView(e.cx, e.cz, size) ? 1 : 3);
+    const behindFirst = (e) => Math.hypot(e.cx - c.x, e.cz - c.z) * (inView(e.cx, e.cz, size) ? 1 : 3);
     const midsLeft = mids.filter((e) => tiles.has(e.key));
     if (midsLeft.length > MAX_MID) {
       midsLeft.sort((a, b) => behindFirst(b) - behindFirst(a)).slice(0, midsLeft.length - MAX_MID).forEach(dropTile);
     }
     const near = [...tiles.values()].filter((e) => e.z === NEAR_ZOOM);
-    // Au zoom avant, on rend la mémoire des tuiles sorties largement du cercle.
-    for (const e of near) if (Math.hypot(e.cx - t.x, e.cz - t.z) > R * 1.25 + size) dropTile(e);
-    if (near.length > MAX_NEAR) {
-      near
+    for (const e of near) if (Math.hypot(rectDist(e.cx, e.cz, size / 2, c.x, c.z), c.y) > R * 1.2 + 300) dropTile(e);
+    const nearLeft = near.filter((e) => tiles.has(e.key));
+    if (nearLeft.length > MAX_NEAR) {
+      nearLeft
         .map((e) => [e, behindFirst(e)])
         .sort((a, b) => b[1] - a[1])
-        .slice(0, near.length - MAX_NEAR)
+        .slice(0, nearLeft.length - MAX_NEAR)
         .forEach(([e]) => dropTile(e));
     }
-    for (const e of near) {
+    for (const e of nearLeft) {
+      if (!tiles.has(e.key)) continue;
       // Une tuile fait 1,6 km : on mesure jusqu'à son bord, pas jusqu'à son centre, sinon celle survolée reste masquée.
-      const edge = Math.hypot(Math.max(Math.abs(e.cx - camera.position.x) - size / 2, 0), Math.max(Math.abs(e.cz - camera.position.z) - size / 2, 0));
+      const edge = rectDist(e.cx, e.cz, size / 2, camera.position.x, camera.position.z);
       const low = camera.position.y < 1100;
       // Les shaders effacent cheminées, lampadaires et arbres un par un avant ces distances : la tuile entière ne disparaît jamais d'un coup.
       if (e.detailMesh) e.detailMesh.visible = extrasOn && Math.hypot(edge, camera.position.y) < 1050;
@@ -967,7 +970,8 @@ export function createScanMap(container, scan, options) {
     const t = controls.target;
     const camDist = camera.position.distanceTo(t);
     // La boîte d'ombre couvre le cercle chargé (pas de bord carré visible) ; au dézoom les ombres s'effacent, la carte n'a plus la résolution.
-    const S = Math.ceil(Math.min(focusRadius(camDist) * 1.02, 4600) / 200) * 200;
+    // Boîte d'ombre resserrée de près : ombres nettes là où on les regarde.
+    const S = Math.ceil(THREE.MathUtils.clamp(camDist * 1.6, 500, 2900) / 100) * 100;
     sun.shadow.intensity = 1 - THREE.MathUtils.smoothstep(camDist, 1900, 3200);
     const c = sun.shadow.camera;
     if (sun.shadow.intensity <= 0) return;
@@ -1112,9 +1116,8 @@ export function createScanMap(container, scan, options) {
     scene.fog.density = (fogBase * FOG_SCALE) / Math.max(1, dist / 1500);
     mats.uniforms.uFogD.value = scene.fog.density;
     mats.uniforms.uDpr.value = dpr;
-    focusCenter();
-    mats.uniforms.uFocus.value.lerp(focusTo.set(focusAt.x, focusAt.z), 0.04);
-    mats.uniforms.uFocusR.value += (focusRadius(dist) - mats.uniforms.uFocusR.value) * 0.04;
+    mats.uniforms.uCam.value.copy(lodCamera());
+    mats.uniforms.uFocusR.value += (focusRadius(introDone ? dist : endPos.length()) - mats.uniforms.uFocusR.value) * 0.08;
     mats.uniforms.uEdge.value += (edgeTo - mats.uniforms.uEdge.value) * 0.04;
     mats.uniforms.uPixel.value = (2 * Math.tan((camera.fov * Math.PI) / 360)) / (container.clientHeight * dpr || 1);
 
