@@ -85,7 +85,7 @@ export function createScanMap(container, scan, options) {
   const hq = /[?&]hq\b/.test(location.search);
 
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-  const maxDpr = hq ? 2 : 1.5;
+  const maxDpr = 2;
   let dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
   renderer.setPixelRatio(dpr);
   renderer.setSize(container.clientWidth, container.clientHeight);
@@ -103,6 +103,9 @@ export function createScanMap(container, scan, options) {
   camera.position.set(-300, 5200, 4200);
 
   const mats = createMaterials(field);
+  const aniso = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
+  mats.uniforms.uFacadeTex.value.anisotropy = aniso;
+  mats.uniforms.uGroundTex.value.anisotropy = aniso;
   const lightLandmarks = addLandmarks(scene, proj);
   const sky = createSky();
   sky.mesh.renderOrder = -200;
@@ -123,7 +126,7 @@ export function createScanMap(container, scan, options) {
   const hemi = new THREE.HemisphereLight(0xffffff, 0x222222, 1);
   scene.add(hemi);
 
-  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: hq ? 4 : 2 }));
+  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
   composer.setPixelRatio(dpr);
   composer.setSize(container.clientWidth, container.clientHeight);
   composer.addPass(new RenderPass(scene, camera));

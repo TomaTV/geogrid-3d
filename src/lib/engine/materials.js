@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { cityTextures } from './textures.js';
 
 const NOISE = /* glsl */ `
 float hash21(vec2 p) {
@@ -20,6 +21,8 @@ float fbm2(vec2 p) {
 // Bruit précalculé : une lecture de texture coûte bien moins que le calculer à chaque pixel.
 const NOISE_FRAG = /* glsl */ `
 uniform sampler2D uNoise;
+uniform sampler2DArray uFacadeTex;
+uniform sampler2DArray uGroundTex;
 float hash21(vec2 p) {
   p = fract(p * vec2(123.34, 456.21));
   p += dot(p, p + 45.32);
@@ -181,6 +184,8 @@ export function createMaterials(field) {
     uFacadeScan: { value: 0.22 },
     uSky: { value: new THREE.Color() },
     uNoise: { value: noiseTexture() },
+    uFacadeTex: { value: cityTextures().facade },
+    uGroundTex: { value: cityTextures().ground },
     uTime: { value: 0 },
     uFocus: { value: new THREE.Vector2() },
     uFocusR: { value: 5000 },
@@ -202,63 +207,40 @@ export function createMaterials(field) {
           float kind = fract(seed * 13.7);
           float tower = step(38.0, vMeta.z);
           gTower = tower;
-          vec3 stone = mix(vec3(0.62, 0.55, 0.44), vec3(0.77, 0.72, 0.63), fract(seed * 7.3 + cellTone));
-          stone = mix(stone, vec3(0.52, 0.53, 0.55), step(0.66, kind) * step(kind, 0.84));
-          stone = mix(stone, vec3(0.50, 0.32, 0.25), step(0.84, kind));
-          stone = mix(stone, vec3(0.44, 0.47, 0.5), tower);
+          float layer = tower > 0.5 ? 3.0 : kind >= 0.84 ? 1.0 : kind >= 0.66 ? 2.0 : 0.0;
           vec2 c = vec2(vWall.x / mix(3.7, 1.8, tower), (vWall.y - 0.4) / mix(3.3, 3.6, tower));
           vec2 fw = fwidth(c);
           gCell = c;
-          gDetail = 1.0 - smoothstep(0.12, 0.4, max(fw.x, fw.y));
-          float ao = mix(0.32, 1.0, smoothstep(0.0, 10.0, vWall.y));
-          float cornice = 0.0;
-          float balcony = 0.0;
-          if (gDetail > 0.0) {
-            vec2 f = fract(c);
-            vec2 aa = clamp(fw * 1.2, 0.01, 0.2);
-            float mx = mix(0.24, 0.07, tower);
-            float my = mix(0.2, 0.12, tower);
-            float wx = smoothstep(mx - aa.x, mx + aa.x, f.x) * (1.0 - smoothstep(1.0 - mx - aa.x, 1.0 - mx + aa.x, f.x));
-            float wy = smoothstep(my - aa.y, my + aa.y, f.y) * (1.0 - smoothstep(0.86 - aa.y, 0.86 + aa.y, f.y));
-            gWin = wx * wy * gDetail * step(3.6, vWall.y);
-            cornice = smoothstep(0.1, 0.0, f.y) * gDetail;
-            balcony = step(2.5, mod(floor(c.y), 4.0)) * smoothstep(0.2, 0.12, f.y) * gDetail;
-          }
-          float storey = smoothstep(3.6, 3.2, vWall.y);
+          gDetail = 1.0 - smoothstep(0.25, 0.7, max(fw.x, fw.y));
+          vec4 tex = texture(uFacadeTex, vec3(c * 0.5, layer));
+          float tone = fract(seed * 7.3 + cellTone);
+          vec3 tint = layer < 0.5 ? mix(vec3(0.84, 0.8, 0.72), vec3(1.0, 0.97, 0.91), tone) : vec3(0.82 + 0.2 * tone);
+          float upper = step(3.6, vWall.y);
           float height01 = clamp(vWall.y / max(vMeta.z, 1.0), 0.0, 1.0);
+          float ao = mix(0.42, 1.0, smoothstep(0.0, 9.0, vWall.y));
           float coping = smoothstep(vMeta.z - 0.8, vMeta.z - 0.4, vWall.y);
-          float farFloors = (1.0 - gDetail) * (1.0 - smoothstep(0.25, 0.6, fw.y)) * step(0.5, fract(c.y));
-          diffuseColor.rgb = stone * ao * (1.0 - 0.22 * cornice) * (1.0 - 0.55 * balcony) * mix(1.0, 0.68, storey) * (0.9 + 0.16 * height01);
-          diffuseColor.rgb *= mix(0.8, 1.0, gDetail) * (1.0 - 0.16 * farFloors) * (1.0 + 0.35 * coping);
-          vec3 glass = mix(vec3(0.16, 0.2, 0.25), vec3(0.24, 0.36, 0.46), tower);
-          glass *= (0.78 + 0.4 * hash21(floor(gCell) + seed * 37.0)) * mix(0.55, 1.0, smoothstep(0.84, 0.62, fract(gCell.y)));
-          diffuseColor.rgb = mix(diffuseColor.rgb, mix(glass, vec3(0.02, 0.025, 0.035), smoothstep(0.0, 0.4, uNight)), gWin);
+          vec3 facade = mix(tint * vec3(0.46, 0.44, 0.42), tex.rgb * tint, upper);
+          diffuseColor.rgb = facade * ao * (0.92 + 0.14 * height01) * (1.0 + 0.3 * coping);
+          float pane = tex.a * upper;
+          gWin = pane * gDetail;
+          vec3 skyGrey = mix(vec3(dot(uSky, vec3(0.33))), uSky, 0.45);
+          vec3 glass = mix(vec3(0.05, 0.065, 0.085), skyGrey * 0.42, 0.25 + 0.5 * fract(c.y)) * (0.75 + 0.4 * hash21(floor(c) + seed * 37.0));
+          glass = mix(glass, skyGrey * 0.7, tower * 0.45);
+          diffuseColor.rgb = mix(diffuseColor.rgb, mix(glass, vec3(0.025, 0.03, 0.04), smoothstep(0.3, 0.8, uNight)), pane);
         } else {
           float tone = fract(seed * 5.1 + cellTone * 0.6);
-          float fine = 1.0 - smoothstep(0.15, 0.6, fwidth(vW.x) * 2.0);
           vec3 roof;
           if (vMeta.x < 1.5) {
-            // Toit-terrasse : gravier et reprises d'étanchéité.
-            roof = mix(vec3(0.3, 0.29, 0.27), vec3(0.42, 0.41, 0.38), tone);
-            roof *= 0.86 + 0.28 * fbm2(vW.xz * 0.11);
-            roof *= 1.0 + 0.05 * (hash21(floor(vW.xz * 2.0)) - 0.5) * fine;
+            // Toit-terrasse.
+            roof = texture(uGroundTex, vec3(vW.xz / 9.0, 0.0)).rgb * mix(0.72, 1.0, tone);
           } else if (vMeta.x < 2.5) {
-            // Tuiles : rangs horizontaux, légère variation d'une tuile à l'autre.
-            float kind = fract(seed * 11.3);
-            roof = mix(vec3(0.46, 0.22, 0.14), vec3(0.56, 0.32, 0.2), tone);
-            roof = mix(roof, vec3(0.2, 0.21, 0.24), step(0.72, kind));
-            float row = vWall.y / 0.36;
-            float rows = 1.0 - smoothstep(0.3, 0.8, fwidth(row));
-            float course = smoothstep(0.0, 0.22, fract(row));
-            float piece = hash21(vec2(floor(vWall.x / 0.45 + floor(row) * 0.5), floor(row)));
-            roof *= mix(1.0, (0.72 + 0.28 * course) * (0.88 + 0.24 * piece), rows);
-            roof *= 0.9 + 0.2 * fbm2(vW.xz * 0.2);
+            // Tuiles ou ardoise.
+            vec3 tileTint = mix(vec3(0.72, 0.36, 0.23), vec3(0.86, 0.5, 0.32), tone);
+            tileTint = mix(tileTint, vec3(0.3, 0.32, 0.37), step(0.72, fract(seed * 11.3)));
+            roof = texture(uGroundTex, vec3(vWall / 2.6, 1.0)).rgb * tileTint;
           } else if (vMeta.x < 3.5) {
-            // Zinc parisien : joints debout et lucarnes.
-            roof = mix(vec3(0.3, 0.34, 0.39), vec3(0.4, 0.43, 0.47), tone);
-            float seam = fract(vWall.x / 0.85);
-            float seams = 1.0 - smoothstep(0.15, 0.5, fwidth(vWall.x / 0.85));
-            roof *= mix(1.0, 0.8 + 0.2 * smoothstep(0.0, 0.1, seam), seams);
+            // Zinc parisien et lucarnes.
+            roof = texture(uGroundTex, vec3(vWall / 3.4, 2.0)).rgb * mix(0.6, 0.8, tone);
             vec2 d = vec2(fract(vWall.x / 4.2), (vWall.y - (vMeta.z - 2.5)) / 1.3);
             gWin = step(0.36, d.x) * step(d.x, 0.64) * step(0.0, d.y) * step(d.y, 1.0) * (1.0 - smoothstep(0.1, 0.4, fwidth(vWall.x / 4.2) * 4.0));
             roof = mix(roof, vec3(0.05, 0.06, 0.08), gWin);
@@ -358,9 +340,8 @@ export function createMaterials(field) {
         float aaX = fwidth(vRoad.x) * halfW;
         float aaY = fwidth(vRoad.y);
         float paintFade = 1.0 - smoothstep(0.12, 0.6, aaX);
-        vec3 asphalt = vec3(0.095, 0.097, 0.102) * (0.82 + 0.36 * fbm2(vW.xz * 0.09));
-        asphalt *= 1.0 + 0.12 * (hash21(floor(vW.xz * 3.0)) - 0.5) * (1.0 - smoothstep(0.05, 0.25, aaX));
-        vec3 pavement = vec3(0.34, 0.33, 0.31) * (0.9 + 0.2 * fbm2(vW.xz * 0.4));
+        vec3 asphalt = texture(uGroundTex, vec3(vW.xz / 7.0, 3.0)).rgb * (0.82 + 0.36 * fbm2(vW.xz * 0.09));
+        vec3 pavement = texture(uGroundTex, vec3(vW.xz / 4.0, 4.0)).rgb;
         float isWalk = walk > 0.0 ? smoothstep(laneEdge - aaX, laneEdge + aaX, xm) : 0.0;
         diffuseColor.rgb = mix(asphalt, pavement, isWalk);
         float curb = walk > 0.0 ? 1.0 - smoothstep(0.0, 0.16 + aaX, abs(xm - laneEdge)) : 0.0;
@@ -428,7 +409,7 @@ export function createMaterials(field) {
       color: /* glsl */ `
         gF = sampleField(vW.xz);
         vec3 ground = vec3(0.3, 0.29, 0.26) * (0.86 + 0.28 * fbm2(vW.xz * 0.03));
-        diffuseColor.rgb = mix(ground, diffuseColor.rgb, smoothstep(0.0, 0.35, uNight));
+        diffuseColor.rgb = mix(ground, diffuseColor.rgb, smoothstep(0.55, 0.85, uNight));
         diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.5, gF.a * 0.4 * mix(uScanGround, 0.2, uScan));
       `,
       emissive: groundEmission,
