@@ -560,12 +560,13 @@ export function createScanMap(container, scan, options) {
       mesh.matrixAutoUpdate = false;
       mesh.updateMatrix();
       add(mesh);
+      // Les volumes simples du lointain se cliquent aussi : sans eux, plus rien n'était sélectionnable au dézoom.
+      entry.buildingMesh = mesh;
+      entry.data = { pos: b.pos, idx: b.idx, starts: b.starts, idxStarts: b.idxStarts, heights: b.heights, boxes: null };
       if (detailed) {
         mesh.customDepthMaterial = mats.buildingDepth;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
-        entry.buildingMesh = mesh;
-        entry.data = { pos: b.pos, idx: b.idx, starts: b.starts, idxStarts: b.idxStarts, heights: b.heights };
         const pre = new THREE.Mesh(g, mats.buildingPre);
         pre.position.copy(mesh.position);
         pre.renderOrder = -150;
@@ -826,24 +827,87 @@ export function createScanMap(container, scan, options) {
   const ndc = new THREE.Vector2();
   let selected = null;
 
+  // Boîte englobante de chaque immeuble, calculée au premier clic sur la tuile.
+  function buildingBoxes(data) {
+    if (data.boxes) return data.boxes;
+    const { pos, starts } = data;
+    const n = starts.length - 1;
+    const boxes = new Float32Array(n * 6);
+    for (let i = 0; i < n; i++) {
+      let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+      for (let v = starts[i] * 3; v < starts[i + 1] * 3; v += 3) {
+        x0 = Math.min(x0, pos[v]); x1 = Math.max(x1, pos[v]);
+        y0 = Math.min(y0, pos[v + 1]); y1 = Math.max(y1, pos[v + 1]);
+        z0 = Math.min(z0, pos[v + 2]); z1 = Math.max(z1, pos[v + 2]);
+      }
+      boxes.set([x0, y0, z0, x1, y1, z1], i * 6);
+    }
+    data.boxes = boxes;
+    return boxes;
+  }
+
+  // Entrée du rayon dans une boîte (méthode des plans), ou Infinity.
+  function rayBox(o, d, b, k) {
+    let t0 = 0;
+    let t1 = Infinity;
+    for (let a = 0; a < 3; a++) {
+      const inv = 1 / d[a];
+      let ta = (b[k + a] - o[a]) * inv;
+      let tb = (b[k + 3 + a] - o[a]) * inv;
+      if (ta > tb) [ta, tb] = [tb, ta];
+      t0 = Math.max(t0, ta);
+      t1 = Math.min(t1, tb);
+      if (t0 > t1) return Infinity;
+    }
+    return t0;
+  }
+
+  // Möller-Trumbore : distance le long du rayon, ou Infinity.
+  function rayTri(o, d, pos, a, b, c) {
+    const e1x = pos[b] - pos[a], e1y = pos[b + 1] - pos[a + 1], e1z = pos[b + 2] - pos[a + 2];
+    const e2x = pos[c] - pos[a], e2y = pos[c + 1] - pos[a + 1], e2z = pos[c + 2] - pos[a + 2];
+    const px = d[1] * e2z - d[2] * e2y, py = d[2] * e2x - d[0] * e2z, pz = d[0] * e2y - d[1] * e2x;
+    const det = e1x * px + e1y * py + e1z * pz;
+    if (Math.abs(det) < 1e-9) return Infinity;
+    const inv = 1 / det;
+    const sx = o[0] - pos[a], sy = o[1] - pos[a + 1], sz = o[2] - pos[a + 2];
+    const u = (sx * px + sy * py + sz * pz) * inv;
+    if (u < 0 || u > 1) return Infinity;
+    const qx = sy * e1z - sz * e1y, qy = sz * e1x - sx * e1z, qz = sx * e1y - sy * e1x;
+    const w = (d[0] * qx + d[1] * qy + d[2] * qz) * inv;
+    if (w < 0 || u + w > 1) return Infinity;
+    const t = (e2x * qx + e2y * qy + e2z * qz) * inv;
+    return t > 0 ? t : Infinity;
+  }
+
+  // Sélection par boîtes puis triangles des seuls immeubles touchés : quelques millisecondes, à toute distance,
+  // tuiles détaillées comme volumes simples du lointain.
   function raycast(clientX, clientY) {
     const rect = renderer.domElement.getBoundingClientRect();
     ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
     raycaster.setFromCamera(ndc, camera);
-    const entries = [...tiles.values()].filter((e) => e.buildingMesh);
-    const hit = raycaster.intersectObjects(entries.map((e) => e.buildingMesh), false)[0];
-    if (!hit) return null;
-    const entry = entries.find((e) => e.buildingMesh === hit.object);
-    const { starts, heights } = entry.data;
-    const v = hit.face.a;
-    let lo = 0;
-    let hi = starts.length - 2;
-    while (lo < hi) {
-      const m = (lo + hi + 1) >> 1;
-      if (starts[m] <= v) lo = m;
-      else hi = m - 1;
+    const { origin, direction } = raycaster.ray;
+    const d = [direction.x, direction.y, direction.z];
+    let best = { t: Infinity };
+    for (const entry of tiles.values()) {
+      const data = entry.data;
+      if (!data) continue;
+      const m = entry.buildingMesh.position;
+      const o = [origin.x - m.x, origin.y, origin.z - m.z];
+      const boxes = buildingBoxes(data);
+      const { pos, idx, idxStarts } = data;
+      for (let i = 0, k = 0; k < boxes.length; i++, k += 6) {
+        const tb = rayBox(o, d, boxes, k);
+        if (tb >= best.t) continue;
+        for (let j = idxStarts[i]; j < idxStarts[i + 1]; j += 3) {
+          const t = rayTri(o, d, pos, idx[j] * 3, idx[j + 1] * 3, idx[j + 2] * 3);
+          if (t < best.t) best = { t, entry, building: i };
+        }
+      }
     }
-    return { entry, building: lo, point: hit.point, height: heights[lo] };
+    if (best.t === Infinity) return null;
+    const point = origin.clone().addScaledVector(direction, best.t);
+    return { entry: best.entry, building: best.building, point, height: best.entry.data.heights[best.building] };
   }
 
   function showHighlight(h) {
