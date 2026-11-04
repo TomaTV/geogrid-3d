@@ -27,24 +27,33 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 }
 
-function carGeometry() {
-  const part = (sx, sy, sz, x, y, z, id, taper = 0) => {
-    const g = new THREE.BoxGeometry(sx, sy, sz);
-    if (taper) {
-      const p = g.attributes.position;
-      for (let i = 0; i < p.count; i++) {
-        if (p.getY(i) > 0) {
-          p.setX(i, p.getX(i) * (1 - taper));
-          p.setZ(i, p.getZ(i) * (1 - taper * 0.4));
-        }
+function part(sx, sy, sz, x, y, z, id, taper = 0) {
+  const g = new THREE.BoxGeometry(sx, sy, sz);
+  if (taper) {
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      if (p.getY(i) > 0) {
+        p.setX(i, p.getX(i) * (1 - taper));
+        p.setZ(i, p.getZ(i) * (1 - taper * 0.4));
       }
-      g.computeVertexNormals();
     }
-    g.translate(x, y, z);
-    g.deleteAttribute('uv');
-    g.setAttribute('aPart', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count).fill(id), 1));
-    return g;
-  };
+    g.computeVertexNormals();
+  }
+  g.translate(x, y, z);
+  g.deleteAttribute('uv');
+  g.setAttribute('aPart', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count).fill(id), 1));
+  return g;
+}
+
+function lampGeometry() {
+  return mergeGeometries([
+    part(0.14, 6.2, 0.14, 0, 3.1, 0, 0),
+    part(1.5, 0.08, 0.1, 0.7, 6.2, 0, 0),
+    part(0.55, 0.09, 0.24, 1.35, 6.13, 0, 1),
+  ]);
+}
+
+function carGeometry() {
   const wheels = [[1.35, 0.82], [1.35, -0.82], [-1.35, 0.82], [-1.35, -0.82]].map(([x, z]) => part(0.62, 0.56, 0.2, x, 0.3, z, 3));
   return mergeGeometries([
     part(4.7, 0.02, 2.15, 0, 0.02, 0, 0),
@@ -85,7 +94,7 @@ function treeGeometries() {
     blob(1, 0.5, 0.26, 0.5, -0.34, 0.66, -0.16, 3),
     blob(1, 0.44, 0.24, 0.44, 0.02, 0.8, -0.3, 4),
   ]);
-  const far = blob(1, 0.95, 0.45, 0.95, 0, 0.58, 0, 1);
+  const far = blob(0, 0.95, 0.45, 0.95, 0, 0.58, 0, 1);
   return { near, far };
 }
 
@@ -235,6 +244,7 @@ export function createScanMap(container, scan, options) {
   let now = 0;
   const trees = treeGeometries();
   const carBase = carGeometry();
+  const lampBase = lampGeometry();
   let extrasOn = true;
   let statFrames = 0;
   let statAt = 0;
@@ -422,6 +432,7 @@ export function createScanMap(container, scan, options) {
       if (e.preMesh) e.preMesh.visible = d < 3000;
       if (e.skirtMesh) e.skirtMesh.visible = extrasOn && d < 1500;
       if (e.carMesh) e.carMesh.visible = extrasOn && d < 1300;
+      if (e.lampMesh) e.lampMesh.visible = extrasOn && d < 800;
       if (!e.treeMesh) continue;
       const useNear = d < 900;
       const geo = useNear ? e.treeNear : e.treeFar;
@@ -462,6 +473,7 @@ export function createScanMap(container, scan, options) {
     if (result.green) add(groundMesh(result.green, mats.green, -60 + base, result.origin));
     if (result.water) add(groundMesh(result.water, mats.water, -55 + base, result.origin));
     if (result.roads) add(groundMesh(result.roads, mats.roads, -50 + base, result.origin));
+    if (result.bridges) add(groundMesh(result.bridges, mats.bridge, 5, result.origin));
 
     if (result.buildings) {
       const b = result.buildings;
@@ -534,6 +546,20 @@ export function createScanMap(container, scan, options) {
       mesh.updateMatrix();
       add(mesh);
       entry.skirtMesh = mesh;
+    }
+    if (result.lamps) {
+      const g = new THREE.InstancedBufferGeometry();
+      g.setIndex(lampBase.index.clone());
+      for (const name of ['position', 'normal', 'aPart']) g.setAttribute(name, lampBase.attributes[name].clone());
+      g.setAttribute('aLamp', new THREE.InstancedBufferAttribute(result.lamps, 4));
+      g.instanceCount = result.lamps.length / 4;
+      g.boundingSphere = new THREE.Sphere(new THREE.Vector3(result.size / 2, 3, result.size / 2), result.size * 0.8);
+      const mesh = new THREE.Mesh(g, mats.lamp);
+      mesh.position.set(result.origin[0], 0, result.origin[1]);
+      mesh.matrixAutoUpdate = false;
+      mesh.updateMatrix();
+      add(mesh);
+      entry.lampMesh = mesh;
     }
     if (result.cars) {
       const g = new THREE.InstancedBufferGeometry();

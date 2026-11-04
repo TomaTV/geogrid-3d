@@ -4,7 +4,7 @@ export const PRESETS = {
   standard: {
     elevation: 40, azimuth: 215, sun: '#a9bcf0', sunPower: 1.5, envPower: 0.62, night: 0.7, stars: 0.35, sunDisc: 0, hemi: '#7888ad',
     zenith: '#0a1224', mid: '#15213a', horizon: '#2a3857', fog: '#1b2540', fogDensity: 0.00036, exposure: 1.12, bloom: 0.24, clouds: '#1f2a42',
-    scan: { road: 0.45, ground: 0.3, groundGlow: 0.07, wall: 0.06, win: 0.1, facade: 0.35, shop: 0.55, winGlow: 0.75, roof: 0.05, facadeScan: 0.15 },
+    scan: { road: 0.45, ground: 0.1, groundGlow: 0.03, wall: 0.06, win: 0.1, facade: 0.35, shop: 0.55, winGlow: 0.75, roof: 0.05, facadeScan: 0.15 },
     colors: { mix: 0.72, glow: 0.06, win: 0.55 },
   },
   dusk: {
@@ -16,7 +16,7 @@ export const PRESETS = {
   night: {
     elevation: 38, azimuth: 150, sun: '#7f9bd8', sunPower: 0.42, envPower: 0.32, night: 1, stars: 1, sunDisc: 0.12,
     zenith: '#02050f', mid: '#071024', horizon: '#14233f', fog: '#0c1526', fogDensity: 0.00046, exposure: 1, bloom: 0.1, clouds: '#1b2740',
-    scan: { road: 0.3, ground: 0.3, groundGlow: 0.05, wall: 0.04, win: 0.12, facade: 0.2, shop: 0.4, winGlow: 0.8, roof: 0.05, facadeScan: 0.15 },
+    scan: { road: 0.3, ground: 0.1, groundGlow: 0.02, wall: 0.04, win: 0.12, facade: 0.2, shop: 0.4, winGlow: 0.8, roof: 0.05, facadeScan: 0.15 },
     colors: { mix: 0.62, glow: 0.04, win: 0.45, fogDensity: 0.00034 },
   },
   day: {

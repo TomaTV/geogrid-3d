@@ -271,7 +271,7 @@ export function createMaterials(field) {
           vec3 tint = rnd2 > 0.95 ? vec3(0.68, 0.8, 1.0) : mix(vec3(1.0, 0.6, 0.28), vec3(1.0, 0.8, 0.56), fract(rnd * 17.0));
           float scanned = max(step(rnd2, gF.a * uScanWin), gF.a * uScan);
           vec3 win = mix(tint, gF.rgb * 1.3, scanned);
-          totalEmissiveRadiance += win * gWin * step(rnd, density) * uNight * (0.55 + 0.55 * fract(rnd * 31.0)) * (0.7 + 0.5 * fract(gCell.y)) * mix(uWinGlow, uColorWin, uScan);
+          totalEmissiveRadiance += win * gWin * step(rnd, density) * uNight * (0.55 + 0.55 * fract(rnd * 31.0)) * (0.7 + 0.5 * fract(gCell.y)) * mix(1.0, 0.4, gTower) * mix(uWinGlow, uColorWin, uScan);
           totalEmissiveRadiance += mix(warm * 0.5, gF.rgb * 0.9, gF.a * mix(uFacadeScan, 1.0, uScan)) * (1.0 - gDetail) * density * uFacade * uNight;
           float shop = (1.0 - smoothstep(3.0, 3.5, vWall.y)) * smoothstep(0.6, 1.2, vWall.y);
           shop *= 1.0 - smoothstep(0.2, 0.7, fwidth(vWall.y));
@@ -327,9 +327,7 @@ export function createMaterials(field) {
   // Le sol teste la profondeur : après la pré-passe, il ne calcule plus les pixels cachés par un immeuble.
   const groundOpts = { depthTest: true, depthWrite: false };
 
-  const roads = patch(
-    new THREE.MeshLambertMaterial(groundOpts),
-    {
+  const roadParts = {
       uniforms,
       vertexHead: 'attribute vec4 aRoad; varying vec4 vRoad;',
       vertexBody: 'vRoad = aRoad;',
@@ -345,28 +343,33 @@ export function createMaterials(field) {
         if (vRoad.z < 0.0) {
           diffuseColor.rgb = texture(uGroundTex, vec3(vW.xz / 4.0, 4.0)).rgb;
         } else {
-          diffuseColor.rgb = texture(uGroundTex, vec3(vW.xz / 7.0, 3.0)).rgb * (0.82 + 0.36 * fbm2(vW.xz * 0.09));
+          diffuseColor.rgb = texture(uGroundTex, vec3(vW.xz / 7.0, 3.0)).rgb * (0.78 + 0.44 * fbm2(vW.xz * 0.07));
+          // Usure au passage des roues, caniveau sombre le long de la bordure.
+          float tracks = 1.0 - smoothstep(0.45, 0.95, abs(fract(xm / max(halfW * 0.5, 1.0)) - 0.5) * 2.0);
+          diffuseColor.rgb *= 1.0 - 0.1 * tracks * paintFade;
+          diffuseColor.rgb *= mix(0.68, 1.0, smoothstep(0.0, 0.8, halfW - xm));
           float ends = min(vRoad.y, vRoad.w);
           float clear = smoothstep(5.0, 10.0, ends);
           float paint = 0.0;
           if (W >= 6.0) {
-            paint = max(paint, step(0.45, fract(vRoad.y / 9.0)) * (1.0 - smoothstep(0.08, 0.12 + aaX, xm)));
-            paint = max(paint, 1.0 - smoothstep(0.07, 0.1 + aaX, abs(xm - (halfW - 0.45))));
+            paint = max(paint, step(0.45, fract(vRoad.y / 9.0)) * (1.0 - smoothstep(0.11, 0.15 + aaX, xm)));
+            paint = max(paint, 1.0 - smoothstep(0.09, 0.12 + aaX, abs(xm - (halfW - 0.5))));
           }
-          if (W >= 9.0) paint = max(paint, step(0.5, fract(vRoad.y / 6.0)) * (1.0 - smoothstep(0.06, 0.09 + aaX, abs(xm - halfW * 0.5))));
+          if (W >= 9.0) paint = max(paint, step(0.5, fract(vRoad.y / 6.0)) * (1.0 - smoothstep(0.08, 0.11 + aaX, abs(xm - halfW * 0.5))));
           paint *= clear;
           if (W >= 4.5 && W <= 12.0 && ends < 7.0) {
             paint = max(paint, step(0.5, fract(xm / 1.1)) * step(2.5, ends) * step(xm, halfW - 0.2));
+            paint = max(paint, (1.0 - smoothstep(0.0, 0.5, abs(ends - 1.7))) * step(xm, halfW - 0.2));
           }
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.72, 0.72, 0.7), paint * paintFade * (1.0 - smoothstep(0.5, 2.0, aaY)));
-          float curb = smoothstep(halfW - 0.22 - aaX, halfW - 0.08, xm);
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.41, 0.39), curb * paintFade);
+          float curb = smoothstep(halfW - 0.2 - aaX, halfW - 0.1, xm);
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.55, 0.54, 0.51), curb * paintFade);
         }
-        diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.5, gF.a * 0.4 * mix(uScanGround, 0.2, uScan));
+        diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.5, gF.a * 0.4 * mix(uScanGround, 0.2, uScan) * (vRoad.z < 0.0 ? 1.0 : 0.12));
       `,
       emissive: /* glsl */ `
         totalEmissiveRadiance += vec3(0.9, 0.6, 0.3) * 0.05 * (1.0 - gF.a) * uNight;
-        totalEmissiveRadiance += gF.rgb * 0.5 * gF.a * 0.4 * uScanRoad;
+        totalEmissiveRadiance += gF.rgb * 0.5 * gF.a * 0.4 * uScanRoad * (vRoad.z < 0.0 ? 0.5 : 0.04);
         if (W > 3.0 && uNight > 0.0) {
           float visible = 1.0 - smoothstep(0.0, 0.5, fwidth(vRoad.y) / 8.0);
           if (vRoad.z > 0.0) {
@@ -377,19 +380,16 @@ export function createMaterials(field) {
             // De près les voitures sont en 3D : ces traînées ne servent que de loin.
             float farOnly = smoothstep(0.35, 0.9, fwidth(vRoad.y));
             totalEmissiveRadiance += tone * smoothstep(0.05, 0.0, abs(flow - 0.5)) * lane * visible * farOnly * uNight * 3.5;
-          } else {
-            float lamp = smoothstep(0.07, 0.0, abs(fract(vRoad.y / 27.0) - 0.5)) * smoothstep(0.14, 0.0, abs(abs(vRoad.x) - 0.92));
-            totalEmissiveRadiance += vec3(1.0, 0.72, 0.42) * lamp * visible * uNight * 2.2;
           }
           float lampLine = vRoad.z > 0.0 ? W * 0.5 + 1.0 : W * 0.46;
-          vec2 pool = vec2((fract(vRoad.y / 27.0) - 0.5) * 27.0 / 8.0, (abs(vRoad.x) * W * 0.5 - lampLine) / 6.0);
-          totalEmissiveRadiance += vec3(1.0, 0.68, 0.4) * exp(-dot(pool, pool) * 2.0) * visible * uNight * 0.3;
+          vec2 pool = vec2((fract(vRoad.y / 27.0) - 0.5) * 27.0 / 6.0, (abs(vRoad.x) * W * 0.5 - lampLine) / 4.0);
+          totalEmissiveRadiance += vec3(1.0, 0.68, 0.4) * exp(-dot(pool, pool) * 2.0) * visible * uNight * 0.13;
         }
         totalEmissiveRadiance += vec3(0.4, 1.0, 0.75) * revealRing(vW.xz) * 2.0;
       `,
-    },
-    'road',
-  );
+  };
+  const roads = patch(new THREE.MeshLambertMaterial(groundOpts), roadParts, 'road');
+  const bridge = patch(new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }), roadParts, 'bridge');
 
   const groundEmission = /* glsl */ `
     totalEmissiveRadiance += gF.rgb * gF.a * mix(uScanGround, 0.2, uScan) * uScanGroundGlow;
@@ -419,7 +419,7 @@ export function createMaterials(field) {
       fragmentHead: 'vec4 gF;',
       color: /* glsl */ `
         gF = sampleField(vW.xz);
-        vec3 ground = vec3(0.3, 0.29, 0.26) * (0.86 + 0.28 * fbm2(vW.xz * 0.03));
+        vec3 ground = vec3(0.3, 0.29, 0.26) * (0.86 + 0.28 * fbm2(vW.xz * 0.03)) * texture(uGroundTex, vec3(vW.xz / 11.0, 0.0)).rgb * 2.1;
         diffuseColor.rgb = mix(ground, diffuseColor.rgb, smoothstep(0.55, 0.85, uNight));
         diffuseColor.rgb = mix(diffuseColor.rgb, gF.rgb * 0.5, gF.a * 0.4 * mix(uScanGround, 0.2, uScan));
       `,
@@ -436,9 +436,17 @@ export function createMaterials(field) {
         vec2 wp = vW.xz * 0.05;
         float wt = uTime * 0.22;
         vec2 ripple = vec2(vnoise(wp + wt) - vnoise(wp - wt + 9.0), vnoise(wp * 1.8 - wt + 3.0) - vnoise(wp * 1.8 + wt + 5.0));
-        normal = normalize(normal + (viewMatrix * vec4(ripple.x * 0.16, 0.0, ripple.y * 0.16, 0.0)).xyz);
+        float closeUp = 1.0 - smoothstep(0.3, 2.5, fwidth(vW.x));
+        vec2 fineP = vW.xz * 0.45;
+        vec2 fine = vec2(vnoise(fineP + wt * 3.0) - vnoise(fineP - wt * 2.0 + 7.0), vnoise(fineP * 1.7 - wt * 3.0 + 3.0) - vnoise(fineP * 1.7 + wt * 2.0 + 5.0));
+        ripple = ripple * 0.14 + fine * 0.09 * closeUp;
+        normal = normalize(normal + (viewMatrix * vec4(ripple.x, 0.0, ripple.y, 0.0)).xyz);
       `,
-      emissive: 'totalEmissiveRadiance += vec3(0.4, 1.0, 0.75) * revealRing(vW.xz) * 2.0;',
+      emissive: /* glsl */ `
+        float grazing = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.5);
+        totalEmissiveRadiance += uSky * grazing * 0.55;
+        totalEmissiveRadiance += vec3(0.4, 1.0, 0.75) * revealRing(vW.xz) * 2.0;
+      `,
     },
     'water',
   );
@@ -460,8 +468,8 @@ export function createMaterials(field) {
         if (vTreeY < 0.24) {
           diffuseColor.rgb = vec3(0.09, 0.065, 0.045);
         } else {
-          vec3 leaf = mix(vec3(0.07, 0.17, 0.05), vec3(0.2, 0.33, 0.09), vTone);
-          leaf = mix(leaf, vec3(0.32, 0.32, 0.09), step(0.86, vTone) * 0.6);
+          vec3 leaf = mix(vec3(0.05, 0.13, 0.045), vec3(0.11, 0.22, 0.07), vTone);
+          leaf = mix(leaf, vec3(0.17, 0.2, 0.07), step(0.86, vTone) * 0.6);
           float dapple = texture2D(uNoise, vW.xz * 0.28 + vW.y * 0.17).r;
           diffuseColor.rgb = leaf * (0.62 + 0.75 * dapple) * (0.55 + 0.85 * smoothstep(0.24, 1.0, vTreeY));
         }
@@ -509,5 +517,23 @@ export function createMaterials(field) {
     'car',
   );
 
-  return { uniforms, building, buildingMid, buildingPre, skirt, buildingDepth, roads, green, land, water, tree, treeDepth, car };
+  const lamp = patch(
+    new THREE.MeshLambertMaterial(),
+    {
+      uniforms,
+      warp: false,
+      vertexHead: 'attribute vec4 aLamp; attribute float aPart; varying float vPart;',
+      normalBody: 'objectNormal = vec3(objectNormal.x * aLamp.z - objectNormal.z * aLamp.w, objectNormal.y, objectNormal.x * aLamp.w + objectNormal.z * aLamp.z);',
+      vertexBody: /* glsl */ `
+        vPart = aPart;
+        transformed = vec3(position.x * aLamp.z - position.z * aLamp.w + aLamp.x, position.y, position.x * aLamp.w + position.z * aLamp.z + aLamp.y);
+      `,
+      fragmentHead: 'varying float vPart;',
+      color: 'diffuseColor.rgb = vec3(0.07, 0.075, 0.08);',
+      emissive: 'if (vPart > 0.5) totalEmissiveRadiance += vec3(1.0, 0.76, 0.48) * (0.1 + 3.0 * uNight);',
+    },
+    'lamp',
+  );
+
+  return { uniforms, building, buildingMid, buildingPre, skirt, lamp, bridge, buildingDepth, roads, green, land, water, tree, treeDepth, car };
 }

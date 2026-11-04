@@ -146,7 +146,7 @@ function zinc(g) {
 }
 
 function asphalt(g) {
-  rect(g, '#4b4c4f', 0, 0, SIZE, SIZE);
+  rect(g, '#5a5b5e', 0, 0, SIZE, SIZE);
   for (let i = 0; i < 16; i++) {
     rect(g, 'rgba(0,0,0,0.05)', hash(i, 5) * SIZE, hash(i, 6) * SIZE, 60 + hash(i, 7) * 220, 40 + hash(i, 8) * 120);
   }

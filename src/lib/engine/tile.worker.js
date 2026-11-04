@@ -549,6 +549,80 @@ function fillMesh(polys, unit, color) {
   return { pos: new Float32Array(pos), nor, col: color ? new Float32Array(col) : null, idx: new Uint32Array(idx) };
 }
 
+// Ponts en volume : tablier, parapets et piles, avec une rampe à chaque bout.
+function buildBridges(lines, E, unit) {
+  const pos = [];
+  const nor = [];
+  const road = [];
+  const idx = [];
+  const quad = (a, b, c, d, n, x0, along, z, rem) => {
+    const v = pos.length / 3;
+    for (const q of [a, b, c, d]) pos.push(q[0], q[1], q[2]);
+    for (let k = 0; k < 4; k++) nor.push(n[0], n[1], n[2]);
+    road.push(x0[0], along[0], z, rem[0], x0[1], along[1], z, rem[1], x0[1], along[1], z, rem[1], x0[0], along[0], z, rem[0]);
+    idx.push(v, v + 1, v + 2, v, v + 2, v + 3);
+  };
+  const nearBorder = (p) => p[0] <= 8 || p[1] <= 8 || p[0] >= E - 8 || p[1] >= E - 8;
+  for (const l of lines) {
+    if (!l.bridge || l.pts.length < 2) continue;
+    const pts = l.pts.map((p) => [p[0] * unit, p[1] * unit]);
+    let total = 0;
+    for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+    const start = nearBorder(l.pts[0]) ? 1000 : 0;
+    const end = start + total + (nearBorder(l.pts[l.pts.length - 1]) ? 1000 : 0);
+    const H = Math.min(6, Math.max(total, 40) * 0.12);
+    const hw = l.width / 2;
+    const yAt = (a) => {
+      const t = Math.min(1, Math.min(a, end - a) / 26);
+      return H * t * t * (3 - 2 * t) + 0.05;
+    };
+    let along = start;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      const dx = b[0] - a[0];
+      const dz = b[1] - a[1];
+      const len = Math.hypot(dx, dz);
+      if (len < 0.01) continue;
+      const nx = -dz / len;
+      const nz = dx / len;
+      const a2 = along + len;
+      const y0 = yAt(along);
+      const y1 = yAt(a2);
+      const L = (p, y, o) => [p[0] + nx * o, y, p[1] + nz * o];
+      const rem = [end - along, end - a2];
+      quad(L(a, y0, hw), L(b, y1, hw), L(b, y1, -hw), L(a, y0, -hw), [0, 1, 0], [1, -1], [along, a2], l.width, rem);
+      for (const side of [1, -1]) {
+        const o = hw * side;
+        quad(L(a, y0 - 0.9, o), L(b, y1 - 0.9, o), L(b, y1 + 0.7, o), L(a, y0 + 0.7, o), [nx * side, 0, nz * side], [1, 1], [along, a2], -l.width, rem);
+        quad(L(a, y0 + 0.7, o), L(b, y1 + 0.7, o), L(b, y1 + 0.7, o - 0.3 * side), L(a, y0 + 0.7, o - 0.3 * side), [0, 1, 0], [1, 1], [along, a2], -l.width, rem);
+        quad(L(a, y0 + 0.7, o - 0.3 * side), L(b, y1 + 0.7, o - 0.3 * side), L(b, y1, o - 0.3 * side), L(a, y0, o - 0.3 * side), [-nx * side, 0, -nz * side], [1, 1], [along, a2], -l.width, rem);
+      }
+      // Piles tous les 30 m, sur la partie à pleine hauteur.
+      let n = Math.ceil(along / 30);
+      for (let at = n * 30; at < a2; n++, at = n * 30) {
+        const y = yAt(at) - 0.9;
+        if (y < 2) continue;
+        const px = a[0] + (dx / len) * (at - along);
+        const pz = a[1] + (dz / len) * (at - along);
+        const ux = (dx / len) * 0.8;
+        const uz = (dz / len) * 0.8;
+        const wx = nx * hw * 0.8;
+        const wz = nz * hw * 0.8;
+        const c = [[px - ux - wx, pz - uz - wz], [px + ux - wx, pz + uz - wz], [px + ux + wx, pz + uz + wz], [px - ux + wx, pz - uz + wz]];
+        for (let k = 0; k < 4; k++) {
+          const p = c[k];
+          const q = c[(k + 1) % 4];
+          const el = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+          quad([p[0], 0, p[1]], [q[0], 0, q[1]], [q[0], y, q[1]], [p[0], y, p[1]], [(q[1] - p[1]) / el, 0, -(q[0] - p[0]) / el], [1, 1], [at, at], -l.width, [end - at, end - at]);
+        }
+      }
+      along = a2;
+    }
+  }
+  return idx.length ? { pos: new Float32Array(pos), nor: new Float32Array(nor), road: new Float32Array(road), idx: new Uint32Array(idx) } : null;
+}
+
 function buildRoads(layer, E, unit, raster) {
   const lines = [];
   for (let i = 0; i < layer.length; i++) {
@@ -558,7 +632,7 @@ function buildRoads(layer, E, unit, raster) {
     if (!def) continue;
     const width = f.properties.ramp ? def[0] * 0.6 : def[0];
     for (const line of f.loadGeometry()) {
-      lines.push({ pts: line.map((p) => [p.x, p.y]), width, order: def[1], cls: f.properties.class });
+      lines.push({ pts: line.map((p) => [p.x, p.y]), width, order: def[1], cls: f.properties.class, bridge: !!raster && f.properties.brunnel === 'bridge' });
     }
   }
   lines.sort((a, b) => a.order - b.order);
@@ -573,8 +647,10 @@ function buildRoads(layer, E, unit, raster) {
     const nearBorder = (p) => p[0] <= 8 || p[1] <= 8 || p[0] >= E - 8 || p[1] >= E - 8;
     let total = 0;
     for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]) * unit;
-    let along = nearBorder(pts[0]) ? 1000 : 0;
-    const end = along + total + (nearBorder(pts[pts.length - 1]) ? 1000 : 0);
+    // Pas de passage piéton sur les voies rapides ni les petits tronçons d'échangeur.
+    const noCrossing = total < 35 || l.cls === 'motorway' || l.cls === 'trunk';
+    let along = noCrossing || nearBorder(pts[0]) ? 1000 : 0;
+    const end = along + total + (noCrossing || nearBorder(pts[pts.length - 1]) ? 1000 : 0);
     const v0 = pos.length / 3;
     for (let i = 0; i < pts.length; i++) {
       const p = pts[Math.max(0, i - 1)];
@@ -608,12 +684,13 @@ function buildRoads(layer, E, unit, raster) {
     }
   };
   // Tous les trottoirs d'abord, toute la chaussée ensuite : aux carrefours, le bitume recouvre les trottoirs des rues voisines.
-  for (const l of lines) if (l.width > 5) emit(l, l.width, true);
-  for (const l of lines) emit(l, l.width > 5 ? l.width - 2 * Math.min(Math.max(l.width * 0.16, 1), 2.6) : l.width, false);
-  if (!idx.length) return { mesh: null, lines };
+  for (const l of lines) if (l.width > 5 && !l.bridge) emit(l, l.width, true);
+  for (const l of lines) if (!l.bridge) emit(l, l.width > 5 ? l.width - 2 * Math.min(Math.max(l.width * 0.16, 1), 2.6) : l.width, false);
+  const bridges = buildBridges(lines, E, unit);
+  if (!idx.length) return { mesh: null, lines, bridges };
   const nor = new Float32Array(pos.length);
   for (let i = 1; i < nor.length; i += 3) nor[i] = 1;
-  return { mesh: { pos: new Float32Array(pos), nor, road: new Float32Array(road), idx: new Uint32Array(idx) }, lines };
+  return { mesh: { pos: new Float32Array(pos), nor, road: new Float32Array(road), idx: new Uint32Array(idx) }, lines, bridges };
 }
 
 const CAR_RATE = { motorway: 0.9, trunk: 0.85, primary: 0.75, secondary: 0.6, tertiary: 0.45, minor: 0.22 };
@@ -623,7 +700,7 @@ function placeCars(lines, E, unit) {
   const data = [];
   for (const l of lines) {
     const rate = CAR_RATE[l.cls];
-    if (!rate) continue;
+    if (!rate || l.bridge) continue;
     for (let i = 1; i < l.pts.length && inst.length < 640; i++) {
       const a = l.pts[i - 1];
       const b = l.pts[i];
@@ -653,6 +730,41 @@ function placeCars(lines, E, unit) {
     }
   }
   return inst.length ? { inst: new Float32Array(inst), data: new Float32Array(data) } : null;
+}
+
+// Lampadaires alignés sur les halos dessinés au sol, tous les 27 m, des deux côtés.
+function placeLamps(lines, E, unit) {
+  const inst = [];
+  for (const l of lines) {
+    if (l.width < 6 || !CAR_RATE[l.cls] || l.bridge) continue;
+    const first = l.pts[0];
+    let along = first[0] <= 8 || first[1] <= 8 || first[0] >= E - 8 || first[1] >= E - 8 ? 1000 : 0;
+    for (let i = 1; i < l.pts.length && inst.length < 1200; i++) {
+      const a = l.pts[i - 1];
+      const b = l.pts[i];
+      const dx = (b[0] - a[0]) * unit;
+      const dz = (b[1] - a[1]) * unit;
+      const len = Math.hypot(dx, dz);
+      if (len < 0.01) continue;
+      const ux = dx / len;
+      const uz = dz / len;
+      let n = Math.ceil(along / 27 - 0.5);
+      for (let at = (n + 0.5) * 27; at < along + len; n++, at = (n + 0.5) * 27) {
+        const t = at - along;
+        const x = a[0] * unit + ux * t;
+        const z = a[1] * unit + uz * t;
+        if (x < 0 || z < 0 || x > E * unit || z > E * unit) continue;
+        for (const side of [1, -1]) {
+          const nx = -uz * side;
+          const nz = ux * side;
+          const off = l.width / 2 - 0.35;
+          inst.push(x + nx * off, z + nz * off, -nx, -nz);
+        }
+      }
+      along += len;
+    }
+  }
+  return inst.length ? new Float32Array(inst) : null;
 }
 
 function noise(x, y) {
@@ -802,17 +914,20 @@ async function build(job) {
     water: fillMesh(water, unit, false),
     green: fillMesh(greensDraw, unit, true),
     roads: roadData.mesh,
+    bridges: roadData.bridges ?? null,
     buildings,
     details,
     skirts,
     cars: near ? placeCars(roadData.lines, E, unit) : null,
+    lamps: near ? placeLamps(roadData.lines, E, unit) : null,
     trees,
   };
 }
 
 function transferables(result) {
   const out = [];
-  for (const part of [result.water, result.green, result.roads, result.buildings, result.details, result.skirts, result.cars, result.trees]) {
+  if (result.lamps) out.push(result.lamps.buffer);
+  for (const part of [result.water, result.green, result.roads, result.bridges, result.buildings, result.details, result.skirts, result.cars, result.trees]) {
     if (!part) continue;
     for (const v of Object.values(part)) if (v && v.buffer) out.push(v.buffer);
   }
