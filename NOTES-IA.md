@@ -101,3 +101,10 @@ Décisions de Thomas : pas de mobile, pas de comparaison de scans. Pas de test h
 - Tour Eiffel jugée un peu cheap par Thomas, acceptée.
 - Day avec une vue dézoomée : bande sombre à l'horizon, probablement le plan `land` (sombre) vu au-delà des tuiles avant que le brouillard ne le couvre. Pas corrigé.
 - Pas d'occlusion ambiante en post-traitement. `GTAOPass` possible si le GPU suit.
+
+## Mise à jour du 2026-11-04 (soir)
+
+- Building colors adouci : `colors.mix` à 0,48 (Standard, Day), 0,52 (Dusk), 0,42 (Night), avant 0,62 à 0,82. Les toits, fenêtres et façades restent lisibles sous la couleur.
+- Captures du README refaites sur GPU : la vue par défaut (sans Building colors) est la capture principale, Building colors vient en second.
+- Angular 22 exige Node 22.22.3+ ou 24.15+ : avec Node 24.14, `ng serve` refuse de démarrer.
+- Idées notées, non faites : écran de chargement, onboarding rapide, page About à garder ou supprimer (tout est dans le README).

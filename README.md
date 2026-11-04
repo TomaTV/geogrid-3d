@@ -1,6 +1,6 @@
 # Geogrid 3D
 
-![Scan simulé affiché sur Paris en 3D, la couleur des immeubles suit le rang estimé](docs/hero.png)
+![Paris en 3D avec un scan simulé : vue par défaut, sans Building colors](docs/hero.png)
 
 Projet d'école réalisé pour le cours Angular de l'IIM.
 
@@ -14,15 +14,21 @@ Le rang est mesuré aux points du scan, pas à chaque immeuble. Entre deux point
 
 Le scan de démonstration est **simulé** : le commerce et les concurrents sont fictifs, et les rangs sont générés par `scripts/demo-scan.mjs` sur une grille 21x21 autour du centre de Paris. Il montre ce que donne un scan varié, ce n'est pas une mesure de Geogrid, et l'interface l'indique. Le mode live affiche de vraies mesures.
 
+La vue par défaut montre la ville sans colorer les immeubles : le scan se lit sur le sol, les routes et les vitrines. Le bouton **Building colors** colore chaque immeuble selon le rang estimé, avec la palette de Geogrid.
+
+![Building colors activé : les immeubles prennent la couleur du rang estimé](docs/colors.png)
+
 Un clic sur un immeuble affiche le rang estimé à cet endroit, le point mesuré le plus proche, la distance au commerce et les meilleurs résultats.
 
 ![Panneau affiché au clic sur un immeuble, avec le rang estimé et les meilleurs résultats](docs/clic.png)
 
-Plusieurs modes visuels changent la lumière et le ciel. Ici Dusk et Day, avec Building colors.
+Plusieurs modes visuels changent la lumière et le ciel. Ici Dusk et Day, sans Building colors, puis Day avec.
 
-![Mode Dusk avec Building colors](docs/dusk.png)
+![Mode Dusk](docs/dusk.png)
 
-![Mode Day avec Building colors](docs/day.png)
+![Mode Day](docs/day.png)
+
+![Mode Day avec Building colors](docs/day-colors.png)
 
 La collection garde les scans sauvegardés, avec leur rang moyen et la répartition de leurs rangs.
 
@@ -31,6 +37,16 @@ La collection garde les scans sauvegardés, avec leur rang moyen et la répartit
 L'assistant crée un scan en 3 étapes : adresse, commerce, puis taille de grille et rayon.
 
 ![Troisième étape de l'assistant de scan](docs/wizard.png)
+
+## Inspiration : Streets GL
+
+Le rendu vise celui de [Streets GL](https://streets.gl) ([dépôt](https://github.com/StrandedKitty/streets-gl)), un moteur WebGL qui construit une ville 3D depuis les données OpenStreetMap, avec de vraies façades, des arbres et un éclairage soigné. Je l'ai découvert à sa sortie et je le trouve exceptionnel.
+
+![Capture de Streets GL : Central Park et Manhattan](docs/streets-gl.png)
+
+*Capture : Streets GL, par StrandedKitty, licence MIT.*
+
+Je ne l'ai pas réutilisé, pour trois raisons : c'est son propre moteur, pas une librairie que l'on pilote depuis Angular, il faudrait donc modifier son code source ; il n'a pas été mis à jour depuis longtemps ; et il est lourd à embarquer. Il fallait aussi recolorer chaque immeuble selon le rang d'un scan, donc contrôler le rendu de bout en bout. J'ai donc écrit un moteur Three.js de zéro, avec le même parti pris visuel : bâtiments et routes d'OpenStreetMap, lumière réaliste, aucun quadrillage.
 
 ## Fonctionnalités
 
@@ -45,7 +61,7 @@ L'assistant crée un scan en 3 étapes : adresse, commerce, puis taille de grill
 
 ## Prérequis
 
-- Node.js et npm (développé avec Node 24 et npm 11)
+- Node.js 22.22.3 ou plus, ou 24.15 ou plus, avec npm (Angular 22 refuse les versions plus anciennes : `ng serve` s'arrête avec « The Angular CLI requires a minimum Node.js version »). Développé avec Node 24 et npm 11
 - Un navigateur avec WebGL2 et une carte graphique correcte
 - Une connexion internet pour les tuiles de carte
 
@@ -128,7 +144,7 @@ api/collection.mjs       json-server sur Vercel
 
 Angular 22, Three.js, Tailwind CSS v4, json-server, tuiles [OpenFreeMap](https://openfreemap.org).
 
-Données cartographiques : © [OpenMapTiles](https://www.openmaptiles.org/), © les contributeurs [OpenStreetMap](https://www.openstreetmap.org/copyright). Le rendu s'inspire de [Streets GL](https://github.com/StrandedKitty/streets-gl), sans en reprendre le code.
+Données cartographiques : © [OpenMapTiles](https://www.openmaptiles.org/), © les contributeurs [OpenStreetMap](https://www.openstreetmap.org/copyright). Le rendu s'inspire de [Streets GL](https://streets.gl), sans en reprendre le code (voir ci-dessous).
 
 ## Démarche et usage de l'IA
 
@@ -140,6 +156,24 @@ Le projet a été construit avec Claude Code (Anthropic), un agent qui lit le d�
 - **Pas de grille visible.** Geogrid mesure des points. Afficher des cases aurait donné un quadrillage : le rang est donc estimé entre les points, et l'interface dit clairement que c'est une estimation.
 - **Un scan de démonstration simulé.** Les vrais scans essayés donnaient peu de variété à l'écran : un commerce local n'est classé que dans sa commune et ses voisines, et le rang change à peine à l'intérieur de Paris. La démo utilise donc des données générées, annoncées comme telles, sur un commerce fictif. Le mode mock tourne sans clé ni crédit. La clé API ne va jamais dans le navigateur ni dans le dépôt : un proxy local l'ajoute côté serveur.
 - **Le projet reste séparé de Geogrid.** Il ne touche pas au produit.
+
+### Mon organisation : un pilote et des agents
+
+Sur mes projets, je ne parle pas directement à chaque agent. J'ai un outil de bureau, Rune compagnon, relié à Claude Code par MCP, avec des plugins et des connexions à mes outils.
+
+1. Je décris la tâche en quelques phrases, souvent à la voix.
+2. Un agent **pilote** la découpe et crée les agents qui font le travail.
+3. Les agents parlent au pilote, pas à moi. Si l'un d'eux hésite, il pose sa question au pilote, qui me la transmet. Je réponds, et le pilote renvoie la réponse à l'agent.
+4. Le pilote me remonte les résultats et vérifie le reste du travail.
+
+Tout est centralisé : je ne suis qu'un seul fil de discussion, au lieu de surveiller plusieurs agents. Je garde les décisions et le jugement du résultat.
+
+### Un projet simple, sauf la 3D
+
+La partie métier était déjà faite dans Geogrid : le système de scan, les rangs, l'API, les crédits. Il n'y avait presque rien à réinventer, il fallait l'importer. Les deux vraies nouveautés ont été :
+
+- **Le moteur 3D**, écrit de zéro, qui a pris la majorité du temps (voir « Inspiration : Streets GL »).
+- **Angular**. Je connaissais les bases, mais pas à l'usage, et ce n'est pas un framework que j'aime. Il a fallu comprendre comment ce qui marche dans Next et React se traduit en Angular : les props deviennent des `input()`, les callbacks des `output()`, l'état local un `signal()`, et les valeurs dérivées un `computed()`.
 
 ### Comment j'ai utilisé l'IA
 
