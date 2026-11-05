@@ -5,7 +5,7 @@ const env = {};
 if (existsSync('.env')) {
   for (const line of readFileSync('.env', 'utf8').split(/\r?\n/)) {
     const m = line.match(/^\s*([A-Z_]+)\s*=\s*(.*)\s*$/);
-    if (m) env[m[1]] = m[2];
+    if (m) env[m[1]] = m[2].replace(/^["']|["']$/g, '');
   }
 }
 const key = process.env.GEOGRID_API_KEY ?? env.GEOGRID_API_KEY;
@@ -31,4 +31,4 @@ createServer(async (req, res) => {
   } catch (e) {
     send(502, { error: { code: 'upstream_unreachable', message: String(e.message) } });
   }
-}).listen(3002, () => console.log('Geogrid proxy on :3002'));
+}).listen(3002, '127.0.0.1', () => console.log('Geogrid proxy on :3002'));

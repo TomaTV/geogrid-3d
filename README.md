@@ -103,6 +103,8 @@ cp .env.example .env
 
 La clé reste côté serveur : le proxy ajoute l'en-tête `Authorization`, le navigateur ne la voit jamais. Le fichier `.env` est ignoré par git.
 
+Le mode live ne marche qu'en local (le proxy vient de `npm run dev`, il n'existe pas sur le site déployé) et n'offre que les grilles 5×5 et 7×7 pour limiter le coût. La clé se colle dans `.env` sans guillemets. En mode mock, le scan sauvegardé reste la fixture 21×21 de Paris quelle que soit l'adresse saisie.
+
 ## Build
 
 ```bash

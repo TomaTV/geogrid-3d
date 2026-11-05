@@ -1,9 +1,9 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { GridSize, ScanRequest } from '../data/scan';
-import { ScanSource } from '../data/scan-source';
+import { GridSize, SCAN_MODE, ScanRequest } from '../data/scan';
+import { ScanSource, describeError } from '../data/scan-source';
 import { ScanStore } from '../data/scan-store';
 
 type Field = 'address' | 'keyword' | 'business' | 'note';
@@ -167,7 +167,7 @@ export class ScanNew {
     { size: 7, label: 'Standard' },
     { size: 13, label: 'Precise' },
     { size: 21, label: 'Max' },
-  ];
+  ].filter((g) => SCAN_MODE === 'mock' || g.size <= 7) as { size: GridSize; label: string }[];
   radii = [1000, 3000, 5000, 10000, 20000];
 
   form = this.fb.nonNullable.group({
@@ -181,6 +181,8 @@ export class ScanNew {
 
   step = signal(1);
   running = signal(false);
+  private destroyed = false;
+  private destroyRef = inject(DestroyRef).onDestroy(() => (this.destroyed = true));
   progress = signal(0);
   label = signal('');
   error = signal<string | null>(null);
@@ -219,18 +221,20 @@ export class ScanNew {
   }
 
   private async launch() {
+    if (this.running()) return;
     this.running.set(true);
     this.progress.set(0);
     try {
       const scan = await this.source.run(this.form.getRawValue() as ScanRequest, (v, l) => {
         this.progress.set(v);
         this.label.set(l);
-      });
+      }, () => this.destroyed);
       const saved = await this.store.create(scan);
+      if (this.destroyed) return;
       await this.router.navigate(['/scans', saved.id]);
     } catch (e) {
       this.running.set(false);
-      this.error.set(e instanceof Error && e.message ? e.message : 'The scan could not be saved. Nothing was added to the collection.');
+      this.error.set(describeError(e) ?? 'The scan could not be saved. Nothing was added to the collection.');
     }
   }
 }
